@@ -7,7 +7,7 @@ import {
   Sparkles,
   Tag,
 } from "lucide-react";
-import { PriorityBadge, UrgencyMeter } from "@/components/ui/Badges";
+import { PriorityBadge, UrgencyMeter } from "@/components/ui/IssueBadges";
 import type { AIAnalysis } from "@/types/issue";
 
 interface GeminiTriageCardProps {

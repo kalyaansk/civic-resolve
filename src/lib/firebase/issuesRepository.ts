@@ -25,6 +25,8 @@ import {
 } from "@/types/issue";
 
 const ISSUES_COLLECTION = "issues";
+const DEFAULT_FIRESTORE_LIST_LIMIT = 100;
+const MAX_FIRESTORE_LIST_LIMIT = 100;
 
 /**
  * In-memory store initialized with SEED_ISSUES so local dev, Playwright E2E,
@@ -254,12 +256,17 @@ function paginateIssues(
 
 /**
  * Lists issues with regional (`state`/`city`), ownership (`mine`), attribute filtering,
- * sorting, and cursor pagination (default `limit(20)`).
+ * sorting, and cursor pagination (bounded to a configurable Firestore `.limit(100)` max).
  */
 export async function listIssues(
   query: ListIssuesQuery,
   currentUserUid?: string | null,
+  options?: { maxFetch?: number },
 ): Promise<PaginatedIssuesResponse> {
+  const fetchLimit = Math.min(
+    MAX_FIRESTORE_LIST_LIMIT,
+    Math.max(1, options?.maxFetch ?? DEFAULT_FIRESTORE_LIST_LIMIT),
+  );
   const db = getAdminDb();
 
   if (db) {
@@ -267,7 +274,7 @@ export async function listIssues(
       const snapshot = await db
         .collection(ISSUES_COLLECTION)
         .orderBy("createdAt", "desc")
-        .limit(200)
+        .limit(fetchLimit)
         .get();
 
       const allIssues = snapshot.docs.map((doc) =>
@@ -600,8 +607,9 @@ export async function startWorkerTask(
   id: string,
   workerName: string,
   note?: string,
+  existingIssue?: Issue,
 ): Promise<Issue | null> {
-  const existing = await getIssueById(id);
+  const existing = existingIssue ?? (await getIssueById(id));
   if (!existing) return null;
 
   const now = new Date().toISOString();
@@ -647,8 +655,9 @@ export interface SubmitWorkerCompletionInput {
 export async function submitWorkerCompletion(
   id: string,
   input: SubmitWorkerCompletionInput,
+  existingIssue?: Issue,
 ): Promise<Issue | null> {
-  const existing = await getIssueById(id);
+  const existing = existingIssue ?? (await getIssueById(id));
   if (!existing) return null;
 
   const now = new Date().toISOString();
@@ -685,38 +694,45 @@ export async function submitWorkerCompletion(
 
 /**
  * Toggles a single authenticated user's upvote on an issue (1 upvote per user).
+ * Reads directly inside a single Firestore transaction on the happy path to avoid
+ * redundant pre-fetch reads.
  */
 export async function toggleIssueUpvote(
   id: string,
   userId: string,
 ): Promise<{ issue: Issue; upvoted: boolean } | null> {
-  const existing = await getIssueById(id);
-  if (!existing) return null;
+  const normalized = id.trim();
+  if (!normalized) return null;
 
   const now = new Date().toISOString();
   const db = getAdminDb();
 
   if (db) {
     try {
-      const docRef = db.collection(ISSUES_COLLECTION).doc(existing.id);
-      return await db.runTransaction(async (tx) => {
-        const snap = await tx.get(docRef);
+      const directRef = db
+        .collection(ISSUES_COLLECTION)
+        .doc(normalized.toLowerCase());
+      const txResult = await db.runTransaction(async (tx) => {
+        const snap = await tx.get(directRef);
+        if (!snap.exists) {
+          return null;
+        }
         const current = sanitizePublicIssue(
-          (snap.exists ? snap.data() : existing) as Partial<Issue>,
-          existing.id,
+          snap.data() as Partial<Issue>,
+          snap.id,
         );
         const set = new Set(current.upvotedBy);
         const alreadyUpvoted = set.has(userId);
-        let nextUpvotes = current.upvotes;
+        const nextUpvotes = alreadyUpvoted
+          ? Math.max(0, current.upvotes - 1)
+          : current.upvotes + 1;
         if (alreadyUpvoted) {
           set.delete(userId);
-          nextUpvotes = Math.max(0, nextUpvotes - 1);
         } else {
           set.add(userId);
-          nextUpvotes += 1;
         }
         const nextUpvotedBy = Array.from(set);
-        tx.update(docRef, {
+        tx.update(directRef, {
           upvotedBy: nextUpvotedBy,
           upvotes: nextUpvotes,
           updatedAt: now,
@@ -731,6 +747,8 @@ export async function toggleIssueUpvote(
           upvoted: !alreadyUpvoted,
         };
       });
+      if (txResult) return txResult;
+      return null;
     } catch (error) {
       console.warn(
         "[CivicResolve Repo] Firestore upvote toggle failed; updating fallback store:",
@@ -738,6 +756,9 @@ export async function toggleIssueUpvote(
       );
     }
   }
+
+  const existing = await getIssueById(normalized);
+  if (!existing) return null;
 
   const set = new Set(existing.upvotedBy);
   const alreadyUpvoted = set.has(userId);

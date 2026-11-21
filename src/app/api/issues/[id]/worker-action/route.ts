@@ -123,30 +123,35 @@ export async function POST(
       const cleanNote = sanitizePlainText(parsedNote.data);
 
       const afterImageBase64 = Buffer.from(imgResult.bytes).toString("base64");
-      const completionVerification = await verifyIssueCompletion({
-        issueTitle: existing.title,
-        issueDescription: existing.description,
-        beforePhotoUrl: existing.photoUrl,
-        afterImageBase64,
-        afterImageMimeType: imgResult.mimeType,
-        completionNote: cleanNote,
-      });
+      const [completionVerification, afterPhotoUrl] = await Promise.all([
+        verifyIssueCompletion({
+          issueTitle: existing.title,
+          issueDescription: existing.description,
+          beforePhotoUrl: existing.photoUrl,
+          afterImageBase64,
+          afterImageMimeType: imgResult.mimeType,
+          completionNote: cleanNote,
+        }),
+        uploadIssuePhoto(
+          existing.id,
+          imgResult.bytes,
+          imgResult.mimeType,
+          imgResult.extension,
+          "after",
+        ),
+      ]);
 
-      const afterPhotoUrl = await uploadIssuePhoto(
+      const updated = await submitWorkerCompletion(
         existing.id,
-        imgResult.bytes,
-        imgResult.mimeType,
-        imgResult.extension,
-        "after",
+        {
+          afterPhotoUrl,
+          workerUid: auth.uid,
+          workerName: auth.actor,
+          workerNote: cleanNote,
+          aiVerification: completionVerification,
+        },
+        existing,
       );
-
-      const updated = await submitWorkerCompletion(existing.id, {
-        afterPhotoUrl,
-        workerUid: auth.uid,
-        workerName: auth.actor,
-        workerNote: cleanNote,
-        aiVerification: completionVerification,
-      });
 
       if (!updated) {
         return NextResponse.json({ error: "Issue not found." }, { status: 404 });
@@ -185,7 +190,12 @@ export async function POST(
     const cleanNote = parsedStart.data.note
       ? sanitizePlainText(parsedStart.data.note)
       : undefined;
-    const updated = await startWorkerTask(existing.id, auth.actor, cleanNote);
+    const updated = await startWorkerTask(
+      existing.id,
+      auth.actor,
+      cleanNote,
+      existing,
+    );
 
     if (!updated) {
       return NextResponse.json({ error: "Issue not found." }, { status: 404 });

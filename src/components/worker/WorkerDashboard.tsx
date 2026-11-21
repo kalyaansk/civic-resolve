@@ -1,27 +1,12 @@
 "use client";
 
-import {
-  ArrowRight,
-  Building2,
-  ClipboardCheck,
-  FileCheck2,
-  Lock,
-  MapPin,
-  Search,
-  ShieldAlert,
-  Sparkles,
-  Wrench,
-} from "lucide-react";
-import Image from "next/image";
-import Link from "next/link";
-import { useMemo, useState } from "react";
+import { ClipboardCheck, FileCheck2, Search, Wrench } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
-import {
-  CompletionVerdictBadge,
-  PriorityBadge,
-  StatusBadge,
-} from "@/components/ui/Badges";
+import { RoleAccessGate } from "@/components/auth/RoleAccessGate";
 import { RadioPills, type RadioPillOption } from "@/components/ui/RadioPills";
+import { WorkerTaskCard } from "@/components/worker/WorkerTaskCard";
+import { useDebouncedValue } from "@/lib/hooks/useDebouncedValue";
 import { MUNICIPAL_DEPARTMENTS, type Issue } from "@/types/issue";
 
 interface WorkerDashboardProps {
@@ -30,42 +15,28 @@ interface WorkerDashboardProps {
 
 type WorkerQueueTab = "ongoing" | "pending";
 
-function isInlineOrSvgUrl(src: string): boolean {
-  return (
-    src.startsWith("data:") || src.startsWith("blob:") || src.endsWith(".svg")
-  );
-}
-
 export function WorkerDashboard({ initialIssues }: WorkerDashboardProps) {
-  const {
-    user,
-    loading,
-    demoEnabled,
-    signInDemoWorker,
-    openSignInDialog,
-  } = useAuth();
+  const { user, loading } = useAuth();
 
   const [queueTab, setQueueTab] = useState<WorkerQueueTab>("ongoing");
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search, 200);
   const [stateFilter, setStateFilter] = useState("All");
   const [cityFilter, setCityFilter] = useState("All");
   const [departmentFilter, setDepartmentFilter] = useState("All");
 
-  const isWorker = user?.role === "worker";
-
-  const ongoingCount = useMemo(
-    () =>
-      initialIssues.filter(
-        (i) => i.status === "Reported" || i.status === "In Progress",
-      ).length,
-    [initialIssues],
-  );
-
-  const pendingCount = useMemo(
-    () =>
-      initialIssues.filter((i) => i.status === "Pending Verification").length,
-    [initialIssues],
-  );
+  const { ongoingCount, pendingCount } = useMemo(() => {
+    let ongoing = 0;
+    let pending = 0;
+    for (const issue of initialIssues) {
+      if (issue.status === "Reported" || issue.status === "In Progress") {
+        ongoing += 1;
+      } else if (issue.status === "Pending Verification") {
+        pending += 1;
+      }
+    }
+    return { ongoingCount: ongoing, pendingCount: pending };
+  }, [initialIssues]);
 
   const availableStates = useMemo(
     () =>
@@ -86,7 +57,7 @@ export function WorkerDashboard({ initialIssues }: WorkerDashboardProps) {
   }, [initialIssues, stateFilter]);
 
   const visibleTasks = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = debouncedSearch.trim().toLowerCase();
     return [...initialIssues]
       .filter((issue) => {
         if (queueTab === "ongoing") {
@@ -117,137 +88,48 @@ export function WorkerDashboard({ initialIssues }: WorkerDashboardProps) {
         return true;
       })
       .sort((a, b) => b.urgencyScore - a.urgencyScore);
-  }, [initialIssues, queueTab, stateFilter, cityFilter, departmentFilter, search]);
+  }, [
+    initialIssues,
+    queueTab,
+    stateFilter,
+    cityFilter,
+    departmentFilter,
+    debouncedSearch,
+  ]);
 
-  if (loading) {
+  const handleStateChange = useCallback((value: string) => {
+    setStateFilter(value);
+    setCityFilter("All");
+  }, []);
+
+  const queueTabOptions: readonly RadioPillOption<WorkerQueueTab>[] = useMemo(
+    () => [
+      {
+        value: "ongoing",
+        label: `Ongoing Tasks (${ongoingCount})`,
+        icon: <Wrench className="h-3.5 w-3.5" aria-hidden="true" />,
+      },
+      {
+        value: "pending",
+        label: `Submitted for Approval (${pendingCount})`,
+        icon: <FileCheck2 className="h-3.5 w-3.5" aria-hidden="true" />,
+      },
+    ],
+    [ongoingCount, pendingCount],
+  );
+
+  if (loading || !user || user.role !== "worker") {
     return (
-      <div className="mx-auto max-w-7xl px-4 py-16 text-center sm:px-6 lg:px-12">
-        <p className="text-sm font-medium text-[#475569]">
-          Verifying Field Worker session...
-        </p>
-      </div>
+      <RoleAccessGate
+        requiredRole="worker"
+        returnTo="/worker"
+        authDescription="Authenticated Field Workers see assigned ongoing municipal defects, open dedicated task execution screens, and upload after-repair proof for instant Gemini AI before-vs-after verification prior to Authority approval."
+      />
     );
   }
-
-  // Citizen or Authority trying to access /worker -> strict 403 Restricted screen
-  if (user && !isWorker) {
-    return (
-      <div className="mx-auto max-w-2xl px-4 py-12 sm:px-6">
-        <section
-          role="alert"
-          className="rounded-2xl border border-[#FECACA] bg-white p-8 text-center shadow-sm"
-        >
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-[#FEF2F2] text-[#991B1B]">
-            <ShieldAlert className="h-6 w-6" aria-hidden="true" />
-          </div>
-          <p className="mt-4 font-mono text-xs font-bold uppercase tracking-wider text-[#991B1B]">
-            HTTP 403 • Access Denied
-          </p>
-          <h1 className="mt-1 font-headline text-2xl font-bold text-[#0F172A]">
-            403 Restricted — Field Workers Only
-          </h1>
-          <p className="mt-2 text-sm leading-relaxed text-[#475569]">
-            You are signed in as{" "}
-            <strong>
-              {user.role === "authority" ? "Municipal Authority" : "Citizen"}
-            </strong>{" "}
-            ({user.displayName}). On-site repair execution and after-repair
-            proof uploads are restricted to pre-authorized Field Crew accounts.
-          </p>
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-            <Link
-              href={user.role === "authority" ? "/admin" : "/"}
-              className="rounded-lg bg-[#1B365D] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#002046]"
-            >
-              {user.role === "authority"
-                ? "Go to Authority Console"
-                : "Return to Explore Issues"}
-            </Link>
-            <Link
-              href="/"
-              className="rounded-lg border border-[#CBD5E1] bg-white px-5 py-2.5 text-sm font-semibold text-[#1B365D] hover:bg-[#F1F5F9]"
-            >
-              View Public Feed
-            </Link>
-          </div>
-        </section>
-      </div>
-    );
-  }
-
-  // Unauthenticated Visitor -> Field Worker Auth gate
-  if (!user) {
-    return (
-      <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6">
-        <section className="rounded-2xl border border-[#E2E8F0] bg-white p-8 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#92400E] text-white">
-              <Lock className="h-6 w-6" aria-hidden="true" />
-            </div>
-            <div>
-              <h1 className="font-headline text-2xl font-bold text-[#0F172A]">
-                Field Worker Authentication Required
-              </h1>
-              <p className="text-sm text-[#475569]">
-                Sign in with a Field Crew account to execute repairs and upload
-                after-repair proof photos.
-              </p>
-            </div>
-          </div>
-
-          <p className="mt-4 text-sm leading-relaxed text-[#334155]">
-            Authenticated Field Workers see assigned ongoing municipal defects,
-            open dedicated task execution screens, and upload after-repair proof
-            for instant Gemini AI before-vs-after verification prior to
-            Authority approval.
-          </p>
-
-          <div className="mt-6 flex flex-wrap items-center gap-3">
-            {demoEnabled && (
-              <button
-                type="button"
-                onClick={() => void signInDemoWorker()}
-                className="inline-flex items-center gap-2 rounded-lg bg-[#92400E] px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#78350F]"
-              >
-                <Wrench className="h-4 w-4" aria-hidden="true" />
-                Demo Field Worker Login
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() =>
-                openSignInDialog({
-                  tab: "worker",
-                  mode: "signin",
-                  returnTo: "/worker",
-                })
-              }
-              className="inline-flex items-center gap-2 rounded-lg border border-[#CBD5E1] bg-white px-5 py-2.5 text-sm font-semibold text-[#1B365D] hover:bg-[#F1F5F9]"
-            >
-              Official Worker Sign-In
-            </button>
-          </div>
-        </section>
-      </div>
-    );
-  }
-
-  const queueTabOptions: readonly RadioPillOption<WorkerQueueTab>[] = [
-    {
-      value: "ongoing",
-      label: `Ongoing Tasks (${ongoingCount})`,
-      icon: <Wrench className="h-3.5 w-3.5" aria-hidden="true" />,
-    },
-    {
-      value: "pending",
-      label: `Submitted for Approval (${pendingCount})`,
-      icon: <FileCheck2 className="h-3.5 w-3.5" aria-hidden="true" />,
-    },
-  ];
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-12">
-      {/* Header */}
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <div className="inline-flex items-center gap-2 rounded-full border border-[#FDE68A] bg-[#FFFBEB] px-3 py-1 text-xs font-semibold text-[#92400E]">
@@ -275,7 +157,6 @@ export function WorkerDashboard({ initialIssues }: WorkerDashboardProps) {
         />
       </div>
 
-      {/* Search & Regional / Department Filter Bar */}
       <section
         aria-label="Field task filters"
         className="mt-5 grid grid-cols-1 gap-3 rounded-2xl border border-[#E2E8F0] bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-4"
@@ -305,10 +186,7 @@ export function WorkerDashboard({ initialIssues }: WorkerDashboardProps) {
           <select
             id="worker-state-filter"
             value={stateFilter}
-            onChange={(e) => {
-              setStateFilter(e.target.value);
-              setCityFilter("All");
-            }}
+            onChange={(e) => handleStateChange(e.target.value)}
             className="w-full rounded-lg border border-[#CBD5E1] bg-[#F8FAFC] px-3 py-2 text-xs font-semibold text-[#0F172A]"
           >
             <option value="All">State: All States</option>
@@ -359,7 +237,6 @@ export function WorkerDashboard({ initialIssues }: WorkerDashboardProps) {
         </div>
       </section>
 
-      {/* Full-Width Task Cards Grid */}
       <section aria-label="Field work task list" className="mt-5">
         {visibleTasks.length === 0 ? (
           <div className="rounded-2xl border border-[#E2E8F0] bg-white p-12 text-center shadow-sm">
@@ -380,107 +257,9 @@ export function WorkerDashboard({ initialIssues }: WorkerDashboardProps) {
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {visibleTasks.map((issue) => {
-              const thumbSrc = issue.photoUrl || "/images/issues/pothole.svg";
-              return (
-                <article
-                  key={issue.id}
-                  className="group flex flex-col justify-between rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-sm transition-all hover:border-[#1B365D]/40 hover:shadow-md"
-                >
-                  <div>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-mono text-xs font-bold text-[#1B365D]">
-                          #{issue.referenceCode}
-                        </span>
-                        <StatusBadge status={issue.status} />
-                        <PriorityBadge priority={issue.priority} />
-                      </div>
-                      <span className="inline-flex items-center gap-1 rounded-full bg-[#CCFBF1] px-2.5 py-0.5 text-[11px] font-bold tabular-nums text-[#0F766E]">
-                        <Sparkles className="h-3 w-3" aria-hidden="true" />
-                        Urgency {issue.urgencyScore} / 100
-                      </span>
-                    </div>
-
-                    <div className="mt-3 flex gap-3.5">
-                      <div className="relative h-20 w-24 shrink-0 overflow-hidden rounded-xl border border-[#E2E8F0] bg-[#F1F5F9]">
-                        <Image
-                          src={thumbSrc}
-                          alt={issue.photoAltText || issue.title}
-                          fill
-                          unoptimized={isInlineOrSvgUrl(thumbSrc)}
-                          sizes="96px"
-                          className="object-cover"
-                        />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <h2 className="font-headline text-base font-bold text-[#0F172A] group-hover:text-[#0369A1]">
-                          <Link
-                            href={`/worker/tasks/${issue.id}`}
-                            className="hover:underline"
-                          >
-                            {issue.title}
-                          </Link>
-                        </h2>
-                        <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-[#475569]">
-                          {issue.description}
-                        </p>
-                      </div>
-                    </div>
-
-                    {issue.status === "Pending Verification" &&
-                      issue.completionReport && (
-                        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#99EFE5] bg-[#F0FDFA] px-3 py-2 text-xs">
-                          <CompletionVerdictBadge
-                            verdict={
-                              issue.completionReport.aiVerification.verdict
-                            }
-                          />
-                          <span className="font-bold tabular-nums text-[#0F766E]">
-                            {issue.completionReport.aiVerification.confidence}%
-                            AI Confidence
-                          </span>
-                        </div>
-                      )}
-                  </div>
-
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[#E2E8F0] pt-3.5">
-                    <div className="min-w-0 space-y-1 text-xs text-[#475569]">
-                      <p className="flex items-center gap-1 truncate font-medium text-[#0F172A]">
-                        <MapPin
-                          className="h-3.5 w-3.5 shrink-0 text-[#0369A1]"
-                          aria-hidden="true"
-                        />
-                        <span className="truncate">
-                          {issue.location.address} • {issue.city}, {issue.state}
-                        </span>
-                      </p>
-                      <p className="flex items-center gap-1 text-[11px] font-semibold text-[#1B365D]">
-                        <Building2
-                          className="h-3 w-3 shrink-0"
-                          aria-hidden="true"
-                        />
-                        {issue.department}
-                      </p>
-                    </div>
-
-                    <Link
-                      href={`/worker/tasks/${issue.id}`}
-                      className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-semibold shadow-xs transition-colors ${
-                        issue.status === "Pending Verification"
-                          ? "border border-[#5B21B6] bg-[#F5F3FF] text-[#5B21B6] hover:bg-[#EDE9FE]"
-                          : "bg-[#1B365D] text-white hover:bg-[#002046]"
-                      }`}
-                    >
-                      {issue.status === "Pending Verification"
-                        ? "View AI Report"
-                        : "Open Task"}
-                      <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-                    </Link>
-                  </div>
-                </article>
-              );
-            })}
+            {visibleTasks.map((issue) => (
+              <WorkerTaskCard key={issue.id} issue={issue} />
+            ))}
           </div>
         )}
       </section>

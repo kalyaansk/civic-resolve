@@ -1,139 +1,23 @@
 "use client";
 
-import * as Dialog from "@radix-ui/react-dialog";
-import {
-  ArrowUp,
-  Building2,
-  Check,
-  CheckCircle2,
-  ChevronRight,
-  Clock,
-  FileCheck2,
-  Flag,
-  MapPin,
-  Maximize2,
-  Share2,
-  ShieldCheck,
-  Sparkles,
-  X,
-} from "lucide-react";
-import Image from "next/image";
+import { ArrowUp, ChevronRight, MapPin, Share2, Sparkles } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
-import { CivicMap } from "@/components/maps/CivicMap";
+import { LifecycleTimeline } from "@/components/issues/LifecycleTimeline";
+import { PhotoEvidenceCard } from "@/components/issues/PhotoEvidenceCard";
+import { DynamicCivicMap } from "@/components/maps/DynamicCivicMap";
 import {
   AIDepartmentBadge,
-  CompletionVerdictBadge,
   PriorityBadge,
   StatusBadge,
   UrgencyMeter,
-} from "@/components/ui/Badges";
-import { buildLifecycleStages, formatDateTime } from "@/lib/utils";
-import type { Issue, IssueStatus } from "@/types/issue";
+} from "@/components/ui/IssueBadges";
+import { formatDateTime, formatFullAddress } from "@/lib/utils/formatters";
+import type { Issue } from "@/types/issue";
 
 interface IssueDetailViewProps {
   initialIssue: Issue;
-}
-
-function getStageIcon(status: IssueStatus) {
-  switch (status) {
-    case "Reported":
-      return Flag;
-    case "In Progress":
-      return Clock;
-    case "Pending Verification":
-      return FileCheck2;
-    case "Resolved":
-      return CheckCircle2;
-    default:
-      return Flag;
-  }
-}
-
-function ZoomableEvidencePhoto({
-  src,
-  alt,
-  triggerLabel,
-  dialogTitle,
-  badgeText,
-  heightClass = "h-44",
-}: {
-  src: string;
-  alt: string;
-  triggerLabel: string;
-  dialogTitle: string;
-  badgeText?: string;
-  heightClass?: string;
-}) {
-  const unoptimized =
-    src.startsWith("data:") || src.startsWith("blob:") || src.endsWith(".svg");
-  return (
-    <Dialog.Root>
-      <Dialog.Trigger asChild>
-        <button
-          type="button"
-          aria-label={triggerLabel}
-          className={`group relative block ${heightClass} w-full overflow-hidden rounded-xl border border-[#E2E8F0] bg-[#F1F5F9]`}
-        >
-          <Image
-            src={src}
-            alt={alt}
-            fill
-            unoptimized={unoptimized}
-            sizes="(max-width: 768px) 100vw, 33vw"
-            className="object-cover transition-transform duration-300 group-hover:scale-[1.03]"
-          />
-          {badgeText && (
-            <span className="absolute top-2 left-2 rounded-full border border-[#CBD5E1] bg-white/95 px-2.5 py-0.5 text-[11px] font-bold text-[#0F172A] shadow-xs">
-              {badgeText}
-            </span>
-          )}
-          <span className="absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full border border-[#CBD5E1] bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-[#1B365D] shadow-sm">
-            <Maximize2 className="h-3 w-3" aria-hidden="true" />
-            Click to enlarge
-          </span>
-        </button>
-      </Dialog.Trigger>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-[#0F172A]/75 backdrop-blur-xs" />
-        <Dialog.Content
-          aria-describedby="photo-lightbox-description"
-          className="fixed left-1/2 top-1/2 z-50 w-[94vw] max-w-4xl -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[#E2E8F0] bg-white p-4 shadow-xl focus:outline-none"
-        >
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <Dialog.Title className="font-headline text-base font-bold text-[#0F172A]">
-                {dialogTitle}
-              </Dialog.Title>
-              <Dialog.Description
-                id="photo-lightbox-description"
-                className="text-xs text-[#475569]"
-              >
-                {alt}
-              </Dialog.Description>
-            </div>
-            <Dialog.Close
-              aria-label="Close photo viewer"
-              className="rounded-lg p-1.5 text-[#475569] hover:bg-[#F1F5F9] hover:text-[#0F172A]"
-            >
-              <X className="h-5 w-5" aria-hidden="true" />
-            </Dialog.Close>
-          </div>
-          <div className="relative mt-3 aspect-video w-full overflow-hidden rounded-xl bg-[#F1F5F9]">
-            <Image
-              src={src}
-              alt={alt}
-              fill
-              unoptimized={unoptimized}
-              sizes="(max-width: 1024px) 94vw, 896px"
-              className="object-contain"
-            />
-          </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
-  );
 }
 
 export function IssueDetailView({ initialIssue }: IssueDetailViewProps) {
@@ -144,9 +28,9 @@ export function IssueDetailView({ initialIssue }: IssueDetailViewProps) {
 
   const upvoted = Boolean(user?.uid && issue.upvotedBy.includes(user.uid));
   const imageSrc = issue.photoUrl || "/images/issues/pothole.svg";
-  const hasResolutionProof = Boolean(issue.completionReport?.afterPhotoUrl);
+  const fullAddressLabel = formatFullAddress(issue);
 
-  const handleUpvote = async () => {
+  const handleUpvote = useCallback(async () => {
     if (!user) {
       openSignInDialog({
         tab: "citizen",
@@ -185,11 +69,13 @@ export function IssueDetailView({ initialIssue }: IssueDetailViewProps) {
     } finally {
       setUpvoting(false);
     }
-  };
+  }, [user, getAuthHeaders, issue.id, openSignInDialog]);
 
-  const handleShare = async () => {
+  const handleShare = useCallback(async () => {
     const shareUrl =
-      typeof window !== "undefined" ? window.location.href : `/issues/${issue.id}`;
+      typeof window !== "undefined"
+        ? window.location.href
+        : `/issues/${issue.id}`;
     try {
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(shareUrl);
@@ -200,31 +86,10 @@ export function IssueDetailView({ initialIssue }: IssueDetailViewProps) {
     } catch {
       setShareMessage("Unable to access clipboard automatically.");
     }
-  };
-
-  const slaTarget =
-    issue.priority === "Critical"
-      ? "Immediate dispatch (< 4 hours)"
-      : issue.priority === "High"
-        ? "24–48 hours"
-        : issue.priority === "Medium"
-          ? "3–5 business days"
-          : "7–14 business days";
-
-  const fullAddressLabel = [
-    issue.location.address,
-    issue.location.district,
-    issue.city,
-    issue.state,
-  ]
-    .filter(Boolean)
-    .join(", ");
-
-  const stages = buildLifecycleStages(issue);
+  }, [issue.id]);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-12">
-      {/* Breadcrumb */}
       <nav
         aria-label="Breadcrumb"
         className="flex items-center gap-1.5 text-xs font-medium text-[#475569]"
@@ -241,7 +106,6 @@ export function IssueDetailView({ initialIssue }: IssueDetailViewProps) {
         </span>
       </nav>
 
-      {/* Issue Header: reference, wrapping badges, title, actions */}
       <div className="mt-4 flex flex-col gap-4 border-b border-[#E2E8F0] pb-6 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0 space-y-3">
           <div className="flex flex-wrap items-start gap-2">
@@ -260,7 +124,7 @@ export function IssueDetailView({ initialIssue }: IssueDetailViewProps) {
         <div className="flex shrink-0 flex-wrap items-center gap-2.5">
           <button
             type="button"
-            onClick={handleUpvote}
+            onClick={() => void handleUpvote()}
             disabled={upvoting}
             aria-pressed={upvoted}
             className={`inline-flex items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-semibold tabular-nums transition-colors ${
@@ -275,7 +139,7 @@ export function IssueDetailView({ initialIssue }: IssueDetailViewProps) {
 
           <button
             type="button"
-            onClick={handleShare}
+            onClick={() => void handleShare()}
             className="inline-flex items-center gap-2 rounded-lg border border-[#CBD5E1] bg-white px-4 py-2.5 text-sm font-semibold text-[#334155] transition-colors hover:bg-[#F1F5F9]"
           >
             <Share2 className="h-4 w-4" aria-hidden="true" />
@@ -294,11 +158,8 @@ export function IssueDetailView({ initialIssue }: IssueDetailViewProps) {
         </p>
       )}
 
-      {/* Two-Column Content Area */}
       <div className="mt-7 grid grid-cols-1 items-start gap-8 lg:grid-cols-12">
-        {/* Left Column (8/12): summary -> AI analysis -> evidence + location */}
         <div className="min-w-0 space-y-6 lg:col-span-8">
-          {/* 1. Complaint Summary & Metadata */}
           <section
             aria-labelledby="complaint-summary-heading"
             className="rounded-2xl border border-[#E2E8F0] bg-white p-6 shadow-sm"
@@ -369,7 +230,6 @@ export function IssueDetailView({ initialIssue }: IssueDetailViewProps) {
             </dl>
           </section>
 
-          {/* 2. Highlighted Gemini AI Analysis Breakdown */}
           <section className="rounded-2xl border border-[#99EFE5] bg-gradient-to-b from-[#F0FDFA] via-white to-white p-6 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E2E8F0] pb-4">
               <div className="flex items-center gap-2.5">
@@ -434,83 +294,8 @@ export function IssueDetailView({ initialIssue }: IssueDetailViewProps) {
             </div>
           </section>
 
-          {/* 3. Compact side-by-side Evidence & Location row */}
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            <section
-              aria-labelledby="photo-evidence-heading"
-              className="flex flex-col justify-between overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white shadow-sm"
-            >
-              <div className="flex items-center justify-between gap-2 p-4 pb-3">
-                <h2
-                  id="photo-evidence-heading"
-                  className="font-headline text-base font-bold text-[#0F172A]"
-                >
-                  Photo Evidence
-                </h2>
-                {hasResolutionProof && (
-                  <span className="rounded-full border border-[#A7F3D0] bg-[#ECFDF5] px-2.5 py-0.5 text-[11px] font-semibold text-[#065F46]">
-                    Before &amp; After Resolution Proof
-                  </span>
-                )}
-              </div>
-
-              {hasResolutionProof && issue.completionReport ? (
-                <div className="space-y-3 px-4 pb-4">
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <ZoomableEvidencePhoto
-                      src={imageSrc}
-                      alt={issue.photoAltText || issue.title}
-                      triggerLabel="Enlarge photo evidence"
-                      dialogTitle={`Before Photo — #${issue.referenceCode}`}
-                      badgeText="Before"
-                      heightClass="h-36"
-                    />
-                    <ZoomableEvidencePhoto
-                      src={issue.completionReport.afterPhotoUrl}
-                      alt={`After-repair proof for ${issue.title}`}
-                      triggerLabel="Enlarge after-repair resolution proof"
-                      dialogTitle={`After-Repair Resolution Proof — #${issue.referenceCode}`}
-                      badgeText="After"
-                      heightClass="h-36"
-                    />
-                  </div>
-                  <div className="rounded-xl border border-[#99EFE5] bg-[#F0FDFA] p-3 text-xs space-y-1">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <CompletionVerdictBadge
-                        verdict={
-                          issue.completionReport.aiVerification.verdict
-                        }
-                      />
-                      <span className="font-bold tabular-nums text-[#0F766E]">
-                        {issue.completionReport.aiVerification.confidence}% AI
-                        Confidence
-                      </span>
-                    </div>
-                    <p className="text-[#334155]">
-                      {issue.completionReport.aiVerification.summary}
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div className="px-4 pb-4">
-                  <ZoomableEvidencePhoto
-                    src={imageSrc}
-                    alt={issue.photoAltText || issue.title}
-                    triggerLabel="Enlarge photo evidence"
-                    dialogTitle={`Photo Evidence — #${issue.referenceCode}`}
-                    heightClass="h-44"
-                  />
-                </div>
-              )}
-
-              <div className="border-t border-[#E2E8F0] bg-[#F8FAFC] px-4 py-2.5 text-xs font-semibold text-[#0F766E]">
-                {hasResolutionProof
-                  ? "Before & After Field Repair Proof Logged"
-                  : issue.photoUrl
-                    ? "Photo Evidence Verified"
-                    : "Civic Vector Reference"}
-              </div>
-            </section>
+            <PhotoEvidenceCard issue={issue} imageSrc={imageSrc} />
 
             <section
               aria-labelledby="location-preview-heading"
@@ -522,7 +307,7 @@ export function IssueDetailView({ initialIssue }: IssueDetailViewProps) {
               >
                 Location Preview
               </h2>
-              <CivicMap
+              <DynamicCivicMap
                 mode="preview"
                 title={issue.title}
                 address={fullAddressLabel}
@@ -534,176 +319,10 @@ export function IssueDetailView({ initialIssue }: IssueDetailViewProps) {
           </div>
         </div>
 
-        {/* Right Column (4/12): sticky 4-stage timeline + Department & SLA */}
-        <div className="min-w-0 space-y-6 lg:sticky lg:top-24 lg:col-span-4">
-          <section
-            aria-labelledby="tracking-timeline-heading"
-            className="rounded-2xl border border-[#E2E8F0] bg-white p-6 shadow-sm"
-          >
-            <h2
-              id="tracking-timeline-heading"
-              className="font-headline text-lg font-bold text-[#0F172A]"
-            >
-              Tracking Timeline
-            </h2>
-            <p className="mt-1 text-xs text-[#475569]">
-              Timestamped municipal lifecycle: Reported → In Progress → Pending
-              Verification → Resolved
-            </p>
-
-            <ol
-              aria-label="Municipal lifecycle stages"
-              className="relative mt-6 space-y-6 before:absolute before:bottom-2 before:left-4 before:top-2 before:w-0.5 before:bg-[#E2E8F0]"
-            >
-              {stages.map((stage) => {
-                const Icon = getStageIcon(stage.status);
-                const stateLabel =
-                  stage.state === "completed"
-                    ? "Completed"
-                    : stage.state === "current"
-                      ? "Current"
-                      : "Pending";
-                return (
-                  <li
-                    key={stage.status}
-                    data-stage={stage.status}
-                    data-state={stage.state}
-                    aria-current={stage.state === "current" ? "step" : undefined}
-                    className="relative pl-11"
-                  >
-                    <span
-                      className={`absolute left-0 top-0.5 flex h-8 w-8 items-center justify-center rounded-full border-2 ${
-                        stage.state === "completed"
-                          ? "border-[#065F46] bg-[#ECFDF5] text-[#065F46]"
-                          : stage.state === "current"
-                            ? "border-[#1B365D] bg-[#1B365D] text-white ring-4 ring-[#1B365D]/15"
-                            : "border-dashed border-[#94A3B8] bg-white text-[#64748B]"
-                      }`}
-                    >
-                      <Icon className="h-4 w-4" aria-hidden="true" />
-                    </span>
-
-                    <div className="space-y-1.5">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span
-                          className={`text-sm font-bold ${
-                            stage.state === "pending"
-                              ? "text-[#475569]"
-                              : "text-[#0F172A]"
-                          }`}
-                        >
-                          {stage.status}
-                        </span>
-                        <span
-                          className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
-                            stage.state === "completed"
-                              ? "border-[#A7F3D0] bg-[#ECFDF5] text-[#065F46]"
-                              : stage.state === "current"
-                                ? "border-[#1B365D] bg-[#EFF6FF] text-[#1B365D]"
-                                : "border-[#CBD5E1] bg-[#F8FAFC] text-[#475569]"
-                          }`}
-                        >
-                          {stage.state === "completed" && (
-                            <Check className="h-3 w-3" aria-hidden="true" />
-                          )}
-                          {stateLabel}
-                        </span>
-                      </div>
-
-                      {stage.entries.length > 0 ? (
-                        stage.entries.map((entry, idx) => (
-                          <div
-                            key={`${entry.timestamp}-${idx}`}
-                            className="space-y-0.5"
-                          >
-                            <time
-                              dateTime={entry.timestamp}
-                              className="block text-[11px] font-medium text-[#64748B]"
-                            >
-                              {formatDateTime(entry.timestamp)}
-                            </time>
-                            <p className="text-xs leading-relaxed text-[#475569]">
-                              {entry.note}
-                            </p>
-                            <p className="text-[11px] font-semibold text-[#64748B]">
-                              Updated by: {entry.updatedBy}
-                            </p>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="text-xs text-[#64748B]">
-                          {stage.status === "In Progress"
-                            ? "A municipal crew will be assigned and field progress will be logged here."
-                            : stage.status === "Pending Verification"
-                              ? "Field crew completion photo and Gemini AI before-vs-after verification will appear here awaiting Authority approval."
-                              : "Final municipal resolution note will appear here once field work concludes."}
-                        </p>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ol>
-          </section>
-
-          <section className="space-y-4 rounded-2xl border border-[#E2E8F0] bg-white p-6 shadow-sm">
-            <div className="flex items-center gap-2">
-              <Building2
-                className="h-5 w-5 text-[#1B365D]"
-                aria-hidden="true"
-              />
-              <h2 className="font-headline text-base font-bold text-[#0F172A]">
-                Department &amp; SLA
-              </h2>
-            </div>
-
-            <dl className="space-y-3 text-xs">
-              <div>
-                <dt className="font-semibold uppercase tracking-wider text-[#64748B]">
-                  Responsible Unit
-                </dt>
-                <dd className="mt-0.5 text-sm font-bold text-[#0F172A]">
-                  {issue.department}
-                </dd>
-              </div>
-              <div>
-                <dt className="font-semibold uppercase tracking-wider text-[#64748B]">
-                  Target Response SLA
-                </dt>
-                <dd className="mt-0.5 font-semibold text-[#0F766E]">
-                  {slaTarget}
-                </dd>
-              </div>
-              <div>
-                <dt className="font-semibold uppercase tracking-wider text-[#64748B]">
-                  Public Reference ID
-                </dt>
-                <dd className="mt-0.5 font-mono font-semibold text-[#0F172A]">
-                  {issue.referenceCode}
-                </dd>
-              </div>
-            </dl>
-
-            {user?.role === "authority" && (
-              <div className="flex items-start gap-2 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3 text-[11px] text-[#475569]">
-                <ShieldCheck
-                  className="mt-0.5 h-4 w-4 shrink-0 text-[#0F766E]"
-                  aria-hidden="true"
-                />
-                <span>
-                  Authority action:{" "}
-                  <Link
-                    href="/admin"
-                    className="font-semibold text-[#0369A1] underline"
-                  >
-                    Open in Authority Console
-                  </Link>
-                  .
-                </span>
-              </div>
-            )}
-          </section>
-        </div>
+        <LifecycleTimeline
+          issue={issue}
+          isAuthority={user?.role === "authority"}
+        />
       </div>
     </div>
   );

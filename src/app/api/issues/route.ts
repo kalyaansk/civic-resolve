@@ -70,7 +70,14 @@ export async function GET(request: Request): Promise<NextResponse> {
     }
 
     const result = await listIssues(parsed.data, currentUserUid);
-    return NextResponse.json(result, { status: 200 });
+    const cacheControl = parsed.data.mine
+      ? "private, no-store"
+      : "public, s-maxage=15, stale-while-revalidate=30";
+
+    return NextResponse.json(result, {
+      status: 200,
+      headers: { "Cache-Control": cacheControl },
+    });
   } catch (error) {
     console.error("[GET /api/issues] Unexpected error:", error);
     return NextResponse.json(

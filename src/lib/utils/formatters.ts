@@ -1,20 +1,5 @@
-import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
 import { escapeCsvCell } from "@/lib/security/sanitize";
-import {
-  ISSUE_STATUSES,
-  type DashboardStats,
-  type Issue,
-  type IssueStatus,
-  type StatusHistoryEntry,
-} from "@/types/issue";
-
-/**
- * Merges Tailwind CSS classes cleanly without conflicting specificity.
- */
-export function cn(...inputs: ClassValue[]): string {
-  return twMerge(clsx(inputs));
-}
+import type { Issue } from "@/types/issue";
 
 /**
  * Formats geographic coordinates with accurate hemisphere labels (N/S and E/W).
@@ -23,33 +8,6 @@ export function formatCoordinates(lat: number, lng: number): string {
   const latDir = lat >= 0 ? "N" : "S";
   const lngDir = lng >= 0 ? "E" : "W";
   return `${Math.abs(lat).toFixed(4)}° ${latDir}, ${Math.abs(lng).toFixed(4)}° ${lngDir}`;
-}
-
-/**
- * Computes aggregate KPI statistics for a given list of issues.
- */
-export function computeDashboardStats(issues: Issue[]): DashboardStats {
-  const total = issues.length;
-  const reported = issues.filter((i) => i.status === "Reported").length;
-  const inProgress = issues.filter((i) => i.status === "In Progress").length;
-  const pendingVerification = issues.filter(
-    (i) => i.status === "Pending Verification",
-  ).length;
-  const resolved = issues.filter((i) => i.status === "Resolved").length;
-  const critical = issues.filter(
-    (i) => i.priority === "Critical" && i.status !== "Resolved",
-  ).length;
-  const resolutionRate = total > 0 ? Math.round((resolved / total) * 100) : 0;
-
-  return {
-    total,
-    reported,
-    inProgress,
-    pendingVerification,
-    resolved,
-    critical,
-    resolutionRate,
-  };
 }
 
 /**
@@ -85,6 +43,41 @@ export function formatRelativeTime(
   const diffDays = Math.floor(diffHours / 24);
   if (diffDays < 30) return `${diffDays}d ago`;
   return formatDateTime(iso);
+}
+
+/**
+ * Checks whether an image source is a data URI, blob URL, or SVG asset
+ * (which should skip Next.js raster optimization).
+ */
+export function isInlineOrSvgUrl(src: string): boolean {
+  return (
+    src.startsWith("data:") || src.startsWith("blob:") || src.endsWith(".svg")
+  );
+}
+
+/**
+ * Formats a complete street + district + city + state address cleanly.
+ */
+export function formatFullAddress(
+  issue: Pick<Issue, "location" | "city" | "state">,
+): string {
+  return [
+    issue.location.address,
+    issue.location.district,
+    issue.city,
+    issue.state,
+  ]
+    .filter(Boolean)
+    .join(", ");
+}
+
+/**
+ * Builds a Google Maps deep link for a coordinate pair.
+ */
+export function buildGoogleMapsUrl(lat: number, lng: number): string {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+    `${lat},${lng}`,
+  )}`;
 }
 
 /**
@@ -176,43 +169,20 @@ export function formatIssuesAsJson(issues: Issue[]): string {
 }
 
 /**
- * Builds a Google Maps deep link for a coordinate pair.
+ * Triggers a browser file download for generated CSV/JSON open-data exports.
  */
-export function buildGoogleMapsUrl(lat: number, lng: number): string {
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-    `${lat},${lng}`,
-  )}`;
-}
-
-/** Visual state of a single municipal lifecycle stage. */
-export type LifecycleStageState = "completed" | "current" | "pending";
-
-export interface LifecycleStage {
-  status: IssueStatus;
-  state: LifecycleStageState;
-  /** All status-history entries recorded for this stage, oldest first. */
-  entries: StatusHistoryEntry[];
-}
-
-/**
- * Always returns all 4 municipal lifecycle stages (`Reported` -> `In Progress` ->
- * `Pending Verification` -> `Resolved`) in order, classifying each as completed, current,
- * or pending based on the issue's status. Resolved is treated as a completed terminal stage.
- */
-export function buildLifecycleStages(
-  issue: Pick<Issue, "status" | "statusHistory">,
-): LifecycleStage[] {
-  const currentIndex = ISSUE_STATUSES.indexOf(issue.status);
-  return ISSUE_STATUSES.map((status, index) => {
-    const entries = issue.statusHistory.filter((e) => e.status === status);
-    let state: LifecycleStageState;
-    if (index < currentIndex || (index === currentIndex && status === "Resolved")) {
-      state = "completed";
-    } else if (index === currentIndex) {
-      state = "current";
-    } else {
-      state = "pending";
-    }
-    return { status, state, entries };
-  });
+export function triggerFileDownload(
+  content: string,
+  filename: string,
+  mimeType: string,
+): void {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
 }

@@ -1,12 +1,16 @@
 "use client";
 
-import { ExternalLink, MapPin } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { PriorityBadge, StatusBadge } from "@/components/ui/Badges";
+import { FallbackCivicMap } from "@/components/maps/FallbackCivicMap";
+import { PriorityBadge, StatusBadge } from "@/components/ui/IssueBadges";
 import { parseGoogleAddressComponents } from "@/lib/maps/geocoding";
 import { loadGoogleMapsApi } from "@/lib/maps/googleMapsLoader";
-import { buildGoogleMapsUrl, formatCoordinates } from "@/lib/utils";
+import {
+  buildGoogleMapsUrl,
+  formatCoordinates,
+} from "@/lib/utils/formatters";
 import type { Issue } from "@/types/issue";
 
 export interface SelectedLocationPayload {
@@ -27,16 +31,13 @@ interface BaseMapProps {
 interface DashboardMapProps extends BaseMapProps {
   mode: "dashboard";
   issues: Issue[];
-  /** Controlled selection (e.g. driven by hovering/selecting an issue card). */
   selectedIssueId?: string | null;
-  /** Called when a map pin is clicked so the parent can highlight the matching issue card. */
   onSelectIssue?: (issueId: string) => void;
 }
 
 interface PickerMapProps extends BaseMapProps {
   mode: "picker";
   addressInputRef?: React.RefObject<HTMLInputElement | null>;
-  /** Incremented or updated whenever external GPS coordinates should trigger reverse geocoding. */
   externalCoords?: { lat: number; lng: number; seq: number } | null;
   onLocationSelect: (payload: SelectedLocationPayload) => void;
 }
@@ -47,10 +48,38 @@ interface PreviewMapProps extends BaseMapProps {
   address: string;
 }
 
-export type CivicMapProps = DashboardMapProps | PickerMapProps | PreviewMapProps;
+export type CivicMapProps =
+  | DashboardMapProps
+  | PickerMapProps
+  | PreviewMapProps;
 
-function clampCoord(val: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, val));
+async function reverseGeocodeCoords(
+  gMaps: typeof google.maps,
+  lat: number,
+  lng: number,
+): Promise<SelectedLocationPayload> {
+  const roundedLat = Number(lat.toFixed(6));
+  const roundedLng = Number(lng.toFixed(6));
+  if (!gMaps.Geocoder) {
+    return { lat: roundedLat, lng: roundedLng };
+  }
+  try {
+    const geocoder = new gMaps.Geocoder();
+    const response = await geocoder.geocode({
+      location: { lat: roundedLat, lng: roundedLng },
+    });
+    const firstResult = response.results?.[0];
+    if (!firstResult) {
+      return { lat: roundedLat, lng: roundedLng };
+    }
+    const parsed = parseGoogleAddressComponents(
+      firstResult.address_components,
+      firstResult.formatted_address,
+    );
+    return { lat: roundedLat, lng: roundedLng, ...parsed };
+  } catch {
+    return { lat: roundedLat, lng: roundedLng };
+  }
 }
 
 /**
@@ -63,7 +92,9 @@ export function CivicMap(props: CivicMapProps) {
   const mapInstanceRef = useRef<google.maps.Map | null>(null);
   const gMapsRef = useRef<typeof google.maps | null>(null);
   const pickerMarkerRef = useRef<google.maps.Marker | null>(null);
-  const dashboardMarkersRef = useRef<Map<string, google.maps.Marker>>(new Map());
+  const dashboardMarkersRef = useRef<Map<string, google.maps.Marker>>(
+    new Map(),
+  );
   const dashboardIssuesRef = useRef<Issue[]>([]);
   const selectIssueRef = useRef<(issueId: string) => void>(() => undefined);
   const onLocationSelectRef = useRef<
@@ -78,7 +109,9 @@ export function CivicMap(props: CivicMapProps) {
   const controlledSelectedId =
     props.mode === "dashboard" ? props.selectedIssueId : undefined;
   const selectedIssueId =
-    controlledSelectedId !== undefined ? controlledSelectedId : internalSelectedId;
+    controlledSelectedId !== undefined
+      ? controlledSelectedId
+      : internalSelectedId;
   const onSelectIssueProp =
     props.mode === "dashboard" ? props.onSelectIssue : undefined;
 
@@ -89,10 +122,8 @@ export function CivicMap(props: CivicMapProps) {
     };
   }, [onSelectIssueProp]);
 
-  // Default map center: Coimbatore, India (11.0168° N, 76.9558° E)
   const centerLat = props.centerLat ?? 11.0168;
   const centerLng = props.centerLng ?? 76.9558;
-
   const pickerOnLocationSelect =
     props.mode === "picker" ? props.onLocationSelect : null;
 
@@ -100,40 +131,6 @@ export function CivicMap(props: CivicMapProps) {
     onLocationSelectRef.current = pickerOnLocationSelect;
   }, [pickerOnLocationSelect]);
 
-  const reverseGeocodeCoords = async (
-    gMaps: typeof google.maps,
-    lat: number,
-    lng: number,
-  ): Promise<SelectedLocationPayload> => {
-    const roundedLat = Number(lat.toFixed(6));
-    const roundedLng = Number(lng.toFixed(6));
-    if (!gMaps.Geocoder) {
-      return { lat: roundedLat, lng: roundedLng };
-    }
-    try {
-      const geocoder = new gMaps.Geocoder();
-      const response = await geocoder.geocode({
-        location: { lat: roundedLat, lng: roundedLng },
-      });
-      const firstResult = response.results?.[0];
-      if (!firstResult) {
-        return { lat: roundedLat, lng: roundedLng };
-      }
-      const parsed = parseGoogleAddressComponents(
-        firstResult.address_components,
-        firstResult.formatted_address,
-      );
-      return {
-        lat: roundedLat,
-        lng: roundedLng,
-        ...parsed,
-      };
-    } catch {
-      return { lat: roundedLat, lng: roundedLng };
-    }
-  };
-
-  // Initialize Google Maps instance once per mode mount
   useEffect(() => {
     let cancelled = false;
     const listeners: google.maps.MapsEventListener[] = [];
@@ -180,28 +177,18 @@ export function CivicMap(props: CivicMapProps) {
             const pos = pickerMarker.getPosition();
             if (!pos) return;
             void reverseGeocodeCoords(gMaps, pos.lat(), pos.lng()).then(
-              (payload) => {
-                onLocationSelectRef.current?.(payload);
-              },
+              (payload) => onLocationSelectRef.current?.(payload),
             );
           }),
-        );
-
-        listeners.push(
-          mapInstance.addListener(
-            "click",
-            (event: google.maps.MapMouseEvent) => {
-              if (!event.latLng) return;
-              pickerMarker.setPosition(event.latLng);
-              void reverseGeocodeCoords(
-                gMaps,
-                event.latLng.lat(),
-                event.latLng.lng(),
-              ).then((payload) => {
-                onLocationSelectRef.current?.(payload);
-              });
-            },
-          ),
+          mapInstance.addListener("click", (event: google.maps.MapMouseEvent) => {
+            if (!event.latLng) return;
+            pickerMarker.setPosition(event.latLng);
+            void reverseGeocodeCoords(
+              gMaps,
+              event.latLng.lat(),
+              event.latLng.lng(),
+            ).then((payload) => onLocationSelectRef.current?.(payload));
+          }),
         );
 
         if (props.addressInputRef?.current && gMaps.places?.Autocomplete) {
@@ -260,7 +247,6 @@ export function CivicMap(props: CivicMapProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.mode]);
 
-  // Dashboard mode: sync markers & auto-fit bounds whenever filtered `issues` change
   const dashboardIssues = props.mode === "dashboard" ? props.issues : null;
   useEffect(() => {
     if (
@@ -280,12 +266,9 @@ export function CivicMap(props: CivicMapProps) {
     dashboardMarkersRef.current.clear();
     dashboardIssuesRef.current = dashboardIssues;
 
-    if (dashboardIssues.length === 0) {
-      return;
-    }
+    if (dashboardIssues.length === 0) return;
 
     const bounds = new gMaps.LatLngBounds();
-
     dashboardIssues.forEach((issue) => {
       const position = { lat: issue.location.lat, lng: issue.location.lng };
       bounds.extend(position);
@@ -294,9 +277,7 @@ export function CivicMap(props: CivicMapProps) {
         map,
         title: `${issue.referenceCode}: ${issue.title}`,
       });
-      marker.addListener("click", () => {
-        selectIssueRef.current(issue.id);
-      });
+      marker.addListener("click", () => selectIssueRef.current(issue.id));
       dashboardMarkersRef.current.set(issue.id, marker);
     });
 
@@ -309,7 +290,6 @@ export function CivicMap(props: CivicMapProps) {
     }
   }, [props.mode, mapsReady, dashboardIssues]);
 
-  // Dashboard mode: highlight the selected pin (larger navy circle) and keep it in view
   useEffect(() => {
     if (props.mode !== "dashboard" || !mapsReady || !gMapsRef.current) return;
     const gMaps = gMapsRef.current;
@@ -331,14 +311,16 @@ export function CivicMap(props: CivicMapProps) {
       (item) => item.id === selectedIssueId,
     );
     if (map && selected) {
-      const position = { lat: selected.location.lat, lng: selected.location.lng };
+      const position = {
+        lat: selected.location.lat,
+        lng: selected.location.lng,
+      };
       if (!map.getBounds()?.contains(position)) {
         map.panTo(position);
       }
     }
   }, [props.mode, mapsReady, dashboardIssues, selectedIssueId]);
 
-  // Picker mode: respond to external GPS updates (Use My Location) with reverse geocoding
   const externalCoords =
     props.mode === "picker" ? props.externalCoords : undefined;
   useEffect(() => {
@@ -374,8 +356,6 @@ export function CivicMap(props: CivicMapProps) {
         null)
       : null;
 
-  const googleMapsExternalUrl = buildGoogleMapsUrl(centerLat, centerLng);
-
   return (
     <div className="overflow-hidden rounded-xl border border-[#CBD5E1] bg-white">
       <div className={`relative w-full ${heightClass}`}>
@@ -392,123 +372,21 @@ export function CivicMap(props: CivicMapProps) {
         />
 
         {(!mapsReady || mapsUnavailable) && (
-          <div
-            className="relative h-full w-full overflow-hidden bg-[#EFF6FF]"
-            role="region"
-            aria-label={
-              props.mode === "picker"
-                ? "Interactive fallback street grid location picker"
-                : "Civic street grid map preview"
+          <FallbackCivicMap
+            mode={props.mode}
+            centerLat={centerLat}
+            centerLng={centerLng}
+            issues={props.mode === "dashboard" ? props.issues : undefined}
+            activeDashboardIssue={activeDashboardIssue}
+            address={props.mode === "preview" ? props.address : undefined}
+            onSelectIssue={(id) => selectIssueRef.current(id)}
+            onPickCoords={
+              props.mode === "picker" ? props.onLocationSelect : undefined
             }
-          >
-            <svg
-              className="absolute inset-0 h-full w-full"
-              viewBox="0 0 800 400"
-              preserveAspectRatio="none"
-              aria-hidden="true"
-            >
-              <rect width="800" height="400" fill="#F1F5F9" />
-              <rect x="40" y="30" width="170" height="110" rx="8" fill="#E2E8F0" />
-              <rect x="250" y="30" width="220" height="110" rx="8" fill="#DCFCE7" />
-              <rect x="510" y="30" width="240" height="110" rx="8" fill="#E2E8F0" />
-              <rect x="40" y="180" width="170" height="160" rx="8" fill="#E2E8F0" />
-              <rect x="250" y="180" width="220" height="160" rx="8" fill="#E2E8F0" />
-              <rect x="510" y="180" width="240" height="160" rx="8" fill="#DBEAFE" />
-              <path
-                d="M0 160 H800 M0 355 H800 M230 0 V400 M490 0 V400"
-                stroke="#FFFFFF"
-                strokeWidth="16"
-              />
-              <path
-                d="M0 160 H800 M230 0 V400 M490 0 V400"
-                stroke="#CBD5E1"
-                strokeWidth="2"
-                strokeDasharray="6 6"
-              />
-            </svg>
-
-            {props.mode === "dashboard" && (
-              <div className="relative z-10 h-full w-full">
-                {props.issues.map((issue, idx) => {
-                  const leftPct = clampCoord(
-                    18 + ((idx * 19 + Math.abs(issue.location.lng * 100)) % 68),
-                    12,
-                    88,
-                  );
-                  const topPct = clampCoord(
-                    18 + ((idx * 23 + Math.abs(issue.location.lat * 100)) % 60),
-                    16,
-                    76,
-                  );
-                  const isSelected = activeDashboardIssue?.id === issue.id;
-                  return (
-                    <button
-                      key={issue.id}
-                      type="button"
-                      onClick={() => selectIssueRef.current(issue.id)}
-                      style={{ left: `${leftPct}%`, top: `${topPct}%` }}
-                      aria-label={`Select issue ${issue.referenceCode}: ${issue.title}`}
-                      aria-pressed={isSelected}
-                      className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2 px-2.5 py-1 text-xs font-bold shadow-md transition-transform ${
-                        isSelected
-                          ? "z-20 scale-110 border-white bg-[#1B365D] text-white"
-                          : "border-white bg-[#0F766E] text-white hover:scale-105"
-                      }`}
-                    >
-                      {issue.urgencyScore}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            {props.mode === "picker" && (
-              <button
-                type="button"
-                onClick={(event) => {
-                  const rect = event.currentTarget.getBoundingClientRect();
-                  const relX = (event.clientX - rect.left) / rect.width - 0.5;
-                  const relY = (event.clientY - rect.top) / rect.height - 0.5;
-                  props.onLocationSelect({
-                    lat: Number((centerLat - relY * 0.012).toFixed(4)),
-                    lng: Number((centerLng + relX * 0.016).toFixed(4)),
-                  });
-                }}
-                aria-label="Click anywhere on the street map to move the incident pin"
-                className="relative z-10 flex h-full w-full cursor-crosshair items-center justify-center focus:outline-none"
-              >
-                <span className="flex flex-col items-center">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-white bg-[#1B365D] text-white shadow-lg">
-                    <MapPin className="h-5 w-5" aria-hidden="true" />
-                  </span>
-                  <span className="mt-1.5 rounded-full border border-[#CBD5E1] bg-white/95 px-2.5 py-0.5 text-[11px] font-semibold text-[#0F172A] shadow-sm">
-                    Click map to adjust pin
-                  </span>
-                </span>
-              </button>
-            )}
-
-            {props.mode === "preview" && (
-              <div className="relative z-10 flex h-full w-full items-center justify-center">
-                <div className="flex flex-col items-center">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-white bg-[#1B365D] text-white shadow-lg">
-                    <MapPin className="h-5 w-5" aria-hidden="true" />
-                  </div>
-                  <span className="mt-2 rounded-lg border border-[#CBD5E1] bg-white/95 px-3 py-1 text-xs font-semibold text-[#0F172A] shadow-sm">
-                    {props.address}
-                  </span>
-                </div>
-              </div>
-            )}
-
-            <div className="pointer-events-none absolute bottom-3 left-3 z-20 rounded-full border border-[#CBD5E1] bg-white/95 px-3 py-1 font-mono text-[11px] font-semibold text-[#0F172A] shadow-sm">
-              {formatCoordinates(centerLat, centerLng)}
-            </div>
-          </div>
+          />
         )}
       </div>
 
-      {/* Selected issue card footer for Dashboard Map View */}
       {props.mode === "dashboard" && activeDashboardIssue && (
         <div className="flex flex-col gap-3 border-t border-[#E2E8F0] bg-[#F8FAFC] p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0 space-y-1">
@@ -537,14 +415,13 @@ export function CivicMap(props: CivicMapProps) {
         </div>
       )}
 
-      {/* Coordinates & external Google Maps link for Preview mode */}
       {props.mode === "preview" && (
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#E2E8F0] bg-[#F8FAFC] px-4 py-2.5 text-xs">
           <span className="font-medium text-[#475569]">
             {props.address} ({formatCoordinates(centerLat, centerLng)})
           </span>
           <a
-            href={googleMapsExternalUrl}
+            href={buildGoogleMapsUrl(centerLat, centerLng)}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 font-semibold text-[#0369A1] hover:underline"

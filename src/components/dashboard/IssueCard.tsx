@@ -3,12 +3,17 @@
 import { ArrowUp, MapPin } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { memo } from "react";
 import {
   AIDepartmentBadge,
   PriorityBadge,
   StatusBadge,
-} from "@/components/ui/Badges";
-import { cn, formatRelativeTime } from "@/lib/utils";
+} from "@/components/ui/IssueBadges";
+import { cn } from "@/lib/utils";
+import {
+  formatRelativeTime,
+  isInlineOrSvgUrl,
+} from "@/lib/utils/formatters";
 import type { Issue } from "@/types/issue";
 
 interface IssueCardProps {
@@ -24,7 +29,7 @@ interface IssueCardProps {
   onFocusIssue?: (issueId: string) => void;
 }
 
-export function IssueCard({
+function IssueCardBase({
   issue,
   upvoted = false,
   upvoting = false,
@@ -34,10 +39,7 @@ export function IssueCard({
   onFocusIssue,
 }: IssueCardProps) {
   const imageSrc = issue.photoUrl || "/images/issues/pothole.svg";
-  const isInlineOrSvg =
-    imageSrc.startsWith("data:") ||
-    imageSrc.startsWith("blob:") ||
-    imageSrc.endsWith(".svg");
+  const isInlineOrSvg = isInlineOrSvgUrl(imageSrc);
   const compact = variant === "compact";
 
   return (
@@ -69,6 +71,8 @@ export function IssueCard({
           src={imageSrc}
           alt={compact ? "" : issue.photoAltText || issue.title}
           fill
+          loading="lazy"
+          decoding="async"
           unoptimized={isInlineOrSvg}
           sizes={
             compact
@@ -102,12 +106,7 @@ export function IssueCard({
           </div>
 
           <div>
-            <h2
-              className={cn(
-                "font-headline font-bold leading-snug text-[#0F172A]",
-                compact ? "text-base" : "text-base",
-              )}
-            >
+            <h2 className="font-headline text-base font-bold leading-snug text-[#0F172A]">
               <Link
                 href={`/issues/${issue.id}`}
                 className="hover:text-[#0369A1] hover:underline"
@@ -157,3 +156,5 @@ export function IssueCard({
     </article>
   );
 }
+
+export const IssueCard = memo(IssueCardBase);

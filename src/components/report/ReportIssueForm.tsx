@@ -1,16 +1,6 @@
 "use client";
 
-import {
-  Camera,
-  Crosshair,
-  Loader2,
-  MapPin,
-  Send,
-  ShieldAlert,
-  Trash2,
-  UserCheck,
-} from "lucide-react";
-import Image from "next/image";
+import { Loader2, Send, ShieldAlert, UserCheck } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -22,11 +12,10 @@ import {
   type FormEvent,
 } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
-import {
-  CivicMap,
-  type SelectedLocationPayload,
-} from "@/components/maps/CivicMap";
+import type { SelectedLocationPayload } from "@/components/maps/DynamicCivicMap";
 import { GeminiTriageCard } from "@/components/report/GeminiTriageCard";
+import { LocationPickerSection } from "@/components/report/LocationPickerSection";
+import { PhotoUploadField } from "@/components/report/PhotoUploadField";
 import {
   ALLOWED_IMAGE_MIME_TYPES,
   MAX_IMAGE_BYTES,
@@ -112,14 +101,13 @@ export function ReportIssueForm() {
   );
 
   const runTriagePreview = useCallback(async () => {
-    if (title.trim().length < 4 || description.trim().length < 10) {
-      return;
-    }
+    if (title.trim().length < 4 || description.trim().length < 10) return;
 
     setAnalyzing(true);
     try {
       let imageBase64: string | null = null;
-      let imageMimeType: "image/jpeg" | "image/png" | "image/webp" | null = null;
+      let imageMimeType: "image/jpeg" | "image/png" | "image/webp" | null =
+        null;
 
       if (photoFile) {
         imageBase64 = await fileToBase64(photoFile);
@@ -159,48 +147,59 @@ export function ReportIssueForm() {
     } finally {
       setAnalyzing(false);
     }
-  }, [title, description, address, district, city, stateName, categoryOverride, photoFile]);
+  }, [
+    title,
+    description,
+    address,
+    district,
+    city,
+    stateName,
+    categoryOverride,
+    photoFile,
+  ]);
 
-  // Debounced live AI preview only once citizen enters meaningful title & description
   useEffect(() => {
-    if (title.trim().length < 6 || description.trim().length < 15) {
-      return;
-    }
+    if (title.trim().length < 6 || description.trim().length < 15) return;
     const timer = setTimeout(() => {
       void runTriagePreview();
     }, 650);
     return () => clearTimeout(timer);
   }, [title, description, categoryOverride, photoFile, runTriagePreview]);
 
-  const handlePhotoChange = (event: ChangeEvent<HTMLInputElement>) => {
-    setPhotoError(null);
-    const files = event.target.files;
-    if (!files || files.length === 0) return;
-    if (files.length > 1) {
-      setPhotoError("Please select 1 photo only (max 5 MB).");
-      return;
-    }
+  const handlePhotoChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      setPhotoError(null);
+      const files = event.target.files;
+      if (!files || files.length === 0) return;
+      if (files.length > 1) {
+        setPhotoError("Please select 1 photo only (max 5 MB).");
+        return;
+      }
 
-    const file = files[0]!;
-    if (
-      !(ALLOWED_IMAGE_MIME_TYPES as readonly string[]).includes(file.type)
-    ) {
-      setPhotoError("Unsupported file type. Upload a JPEG, PNG, or WebP photo.");
-      return;
-    }
-    if (file.size > MAX_IMAGE_BYTES) {
-      setPhotoError("Photo exceeds the 5 MB limit. Please choose a smaller file.");
-      return;
-    }
+      const file = files[0]!;
+      if (!(ALLOWED_IMAGE_MIME_TYPES as readonly string[]).includes(file.type)) {
+        setPhotoError(
+          "Unsupported file type. Upload a JPEG, PNG, or WebP photo.",
+        );
+        return;
+      }
+      if (file.size > MAX_IMAGE_BYTES) {
+        setPhotoError(
+          "Photo exceeds the 5 MB limit. Please choose a smaller file.",
+        );
+        return;
+      }
 
-    if (photoPreviewUrl) {
-      URL.revokeObjectURL(photoPreviewUrl);
-    }
-    setPhotoFile(file);
-    setPhotoPreviewUrl(URL.createObjectURL(file));
-  };
+      if (photoPreviewUrl) {
+        URL.revokeObjectURL(photoPreviewUrl);
+      }
+      setPhotoFile(file);
+      setPhotoPreviewUrl(URL.createObjectURL(file));
+    },
+    [photoPreviewUrl],
+  );
 
-  const handleRemovePhoto = () => {
+  const handleRemovePhoto = useCallback(() => {
     if (photoPreviewUrl) {
       URL.revokeObjectURL(photoPreviewUrl);
     }
@@ -210,9 +209,9 @@ export function ReportIssueForm() {
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
-  };
+  }, [photoPreviewUrl]);
 
-  const handleUseMyLocation = () => {
+  const handleUseMyLocation = useCallback(() => {
     setLocationMessage(null);
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       setLocationMessage(
@@ -246,7 +245,7 @@ export function ReportIssueForm() {
       },
       { enableHighAccuracy: true, timeout: 6000 },
     );
-  };
+  }, []);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -256,7 +255,8 @@ export function ReportIssueForm() {
       openSignInDialog({
         tab: "citizen",
         mode: "signin",
-        message: "Sign in as a Citizen to submit your report (your draft stays intact).",
+        message:
+          "Sign in as a Citizen to submit your report (your draft stays intact).",
       });
       return;
     }
@@ -331,7 +331,8 @@ export function ReportIssueForm() {
 
       if (!res.ok || !data.issue) {
         setSubmitError(
-          data.error || "Unable to submit issue report. Please check your inputs.",
+          data.error ||
+            "Unable to submit issue report. Please check your inputs.",
         );
         setSubmitting(false);
         return;
@@ -389,7 +390,6 @@ export function ReportIssueForm() {
 
   return (
     <div className="mt-7 grid grid-cols-1 items-start gap-8 lg:grid-cols-12">
-      {/* Left Column: Issue Report Form */}
       <form
         onSubmit={handleSubmit}
         noValidate
@@ -482,126 +482,25 @@ export function ReportIssueForm() {
           </p>
         </div>
 
-        {/* Location Picker + Reverse Geocoding + Autocomplete + GPS */}
-        <div className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <label
-              htmlFor="issue-address"
-              className="block text-sm font-semibold text-[#0F172A]"
-            >
-              Incident Location <span className="text-[#991B1B]">*</span>
-            </label>
-            <button
-              type="button"
-              onClick={handleUseMyLocation}
-              disabled={locating}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[#CBD5E1] bg-[#F8FAFC] px-3 py-1.5 text-xs font-semibold text-[#1B365D] transition-colors hover:bg-[#EFF6FF] disabled:opacity-60"
-            >
-              {locating ? (
-                <Loader2
-                  className="h-3.5 w-3.5 animate-spin"
-                  aria-hidden="true"
-                />
-              ) : (
-                <Crosshair className="h-3.5 w-3.5" aria-hidden="true" />
-              )}
-              Use My Location
-            </button>
-          </div>
+        <LocationPickerSection
+          addressInputRef={addressInputRef}
+          address={address}
+          onAddressChange={setAddress}
+          city={city}
+          onCityChange={setCity}
+          stateName={stateName}
+          onStateChange={setStateName}
+          district={district}
+          onDistrictChange={setDistrict}
+          lat={lat}
+          lng={lng}
+          externalCoords={externalCoords}
+          locating={locating}
+          locationMessage={locationMessage}
+          onUseMyLocation={handleUseMyLocation}
+          onLocationSelect={handleMapLocationSelect}
+        />
 
-          <div className="relative">
-            <MapPin
-              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#0369A1]"
-              aria-hidden="true"
-            />
-            <input
-              ref={addressInputRef}
-              id="issue-address"
-              name="address"
-              type="text"
-              required
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              placeholder="Search street address or click map to auto-fill"
-              className="w-full rounded-lg border border-[#CBD5E1] bg-[#F8FAFC] py-2.5 pl-9 pr-3 text-sm text-[#0F172A] placeholder:text-[#64748B] focus:bg-white"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <div>
-              <label
-                htmlFor="issue-city"
-                className="block text-xs font-semibold text-[#0F172A]"
-              >
-                City <span className="text-[#991B1B]">*</span>
-              </label>
-              <input
-                id="issue-city"
-                name="city"
-                type="text"
-                required
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-                placeholder="e.g., Coimbatore"
-                className="mt-1 w-full rounded-lg border border-[#CBD5E1] bg-[#F8FAFC] px-3 py-2 text-sm text-[#0F172A] placeholder:text-[#64748B] focus:bg-white"
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="issue-state"
-                className="block text-xs font-semibold text-[#0F172A]"
-              >
-                State <span className="text-[#991B1B]">*</span>
-              </label>
-              <input
-                id="issue-state"
-                name="state"
-                type="text"
-                required
-                value={stateName}
-                onChange={(e) => setStateName(e.target.value)}
-                placeholder="e.g., Tamil Nadu"
-                className="mt-1 w-full rounded-lg border border-[#CBD5E1] bg-[#F8FAFC] px-3 py-2 text-sm text-[#0F172A] placeholder:text-[#64748B] focus:bg-white"
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="issue-district"
-                className="block text-xs font-semibold text-[#0F172A]"
-              >
-                District / Locality
-              </label>
-              <input
-                id="issue-district"
-                name="district"
-                type="text"
-                value={district}
-                onChange={(e) => setDistrict(e.target.value)}
-                placeholder="e.g., RS Puram"
-                className="mt-1 w-full rounded-lg border border-[#CBD5E1] bg-[#F8FAFC] px-3 py-2 text-sm text-[#0F172A] placeholder:text-[#64748B] focus:bg-white"
-              />
-            </div>
-          </div>
-
-          {locationMessage && (
-            <p className="text-xs font-medium text-[#0F766E]">
-              {locationMessage}
-            </p>
-          )}
-
-          <CivicMap
-            mode="picker"
-            centerLat={lat}
-            centerLng={lng}
-            addressInputRef={addressInputRef}
-            externalCoords={externalCoords}
-            onLocationSelect={handleMapLocationSelect}
-          />
-        </div>
-
-        {/* Category Override */}
         <div>
           <label
             htmlFor="issue-category"
@@ -625,82 +524,15 @@ export function ReportIssueForm() {
           </select>
         </div>
 
-        {/* Photo Evidence Upload (Max 1 photo <= 5 MB) */}
-        <div className="space-y-2.5">
-          <label
-            htmlFor="issue-photo"
-            className="block text-sm font-semibold text-[#0F172A]"
-          >
-            Photo Evidence (Optional — 1 photo up to 5 MB)
-          </label>
-          <div className="rounded-xl border-2 border-dashed border-[#CBD5E1] bg-[#F8FAFC] p-5 text-center transition-colors hover:border-[#0369A1]">
-            <Camera
-              className="mx-auto h-7 w-7 text-[#0369A1]"
-              aria-hidden="true"
-            />
-            <p className="mt-2 text-sm font-semibold text-[#0F172A]">
-              Attach field photo for Gemini multimodal triage
-            </p>
-            <p className="mt-0.5 text-xs text-[#475569]">
-              Maximum 1 photo up to 5 MB (JPEG, PNG, or WebP)
-            </p>
-            <input
-              ref={fileInputRef}
-              id="issue-photo"
-              name="photo"
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              onChange={handlePhotoChange}
-              aria-describedby="photo-upload-error"
-              className="mt-3 block w-full cursor-pointer text-xs text-[#475569] file:mr-3 file:rounded-lg file:border file:border-[#CBD5E1] file:bg-white file:px-3.5 file:py-1.5 file:text-xs file:font-semibold file:text-[#1B365D] hover:file:bg-[#EFF6FF]"
-            />
-          </div>
+        <PhotoUploadField
+          fileInputRef={fileInputRef}
+          photoFile={photoFile}
+          photoPreviewUrl={photoPreviewUrl}
+          photoError={photoError}
+          onPhotoChange={handlePhotoChange}
+          onRemovePhoto={handleRemovePhoto}
+        />
 
-          {photoError && (
-            <p
-              id="photo-upload-error"
-              role="alert"
-              className="text-xs font-semibold text-[#991B1B]"
-            >
-              {photoError}
-            </p>
-          )}
-
-          {photoFile && photoPreviewUrl && (
-            <div className="flex items-center justify-between gap-3 rounded-xl border border-[#CBD5E1] bg-white p-3">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="relative h-14 w-20 shrink-0 overflow-hidden rounded-lg bg-[#F1F5F9]">
-                  <Image
-                    src={photoPreviewUrl}
-                    alt={`Preview of ${photoFile.name}`}
-                    fill
-                    unoptimized
-                    className="object-cover"
-                  />
-                </div>
-                <div className="min-w-0">
-                  <p className="truncate text-xs font-bold text-[#0F172A]">
-                    {photoFile.name}
-                  </p>
-                  <p className="text-[11px] text-[#475569]">
-                    {(photoFile.size / (1024 * 1024)).toFixed(2)} MB • Ready for
-                    Gemini Vision
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={handleRemovePhoto}
-                aria-label="Remove attached photo"
-                className="rounded-lg p-2 text-[#475569] hover:bg-[#FEF2F2] hover:text-[#991B1B]"
-              >
-                <Trash2 className="h-4 w-4" aria-hidden="true" />
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Form Actions */}
         <div className="flex flex-col-reverse gap-3 border-t border-[#E2E8F0] pt-5 sm:flex-row sm:items-center sm:justify-between">
           <Link
             href="/"
@@ -729,7 +561,6 @@ export function ReportIssueForm() {
         </div>
       </form>
 
-      {/* Right Column: Sticky Gemini AI Triage Card */}
       <div className="lg:sticky lg:top-24 lg:col-span-5">
         <GeminiTriageCard
           analysis={analysis}

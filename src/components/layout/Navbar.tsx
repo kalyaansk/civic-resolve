@@ -13,7 +13,17 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { MobileNavMenu } from "@/components/layout/MobileNavMenu";
 import { cn } from "@/lib/utils";
+
+function navLinkClass(active: boolean): string {
+  return cn(
+    "flex h-16 items-center border-b-2 px-3 text-sm font-semibold transition-colors",
+    active
+      ? "border-[#1B365D] text-[#1B365D]"
+      : "border-transparent text-[#475569] hover:text-[#0F172A]",
+  );
+}
 
 export function Navbar() {
   const pathname = usePathname();
@@ -31,7 +41,7 @@ export function Navbar() {
   const isCitizen = user?.role === "citizen";
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-[#E2E8F0] bg-white/95 backdrop-blur-md shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
+    <header className="sticky top-0 z-40 w-full border-b border-[#E2E8F0] bg-white/95 shadow-[0_1px_8px_rgba(0,0,0,0.04)] backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-12">
         <div className="flex items-center gap-6 lg:gap-8">
           <Link
@@ -63,7 +73,7 @@ export function Navbar() {
             </span>
           </Link>
 
-          <span className="hidden xl:inline-flex items-center gap-1.5 rounded-full border border-[#99EFE5] bg-[#F0FDFA] px-2.5 py-0.5 text-xs font-semibold text-[#0F766E]">
+          <span className="hidden items-center gap-1.5 rounded-full border border-[#99EFE5] bg-[#F0FDFA] px-2.5 py-0.5 text-xs font-semibold text-[#0F766E] xl:inline-flex">
             <span
               className="h-1.5 w-1.5 rounded-full bg-[#0F766E]"
               aria-hidden="true"
@@ -71,21 +81,15 @@ export function Navbar() {
             Civic Pulse Live
           </span>
 
-          {/* Strict Role-Based Navigation Links */}
           <nav
             aria-label="Primary navigation"
-            className="hidden md:flex items-center gap-1"
+            className="hidden items-center gap-1 md:flex"
           >
             {!user && (
               <Link
                 href="/"
                 aria-current={isFeedActive ? "page" : undefined}
-                className={cn(
-                  "flex h-16 items-center border-b-2 px-3 text-sm font-semibold transition-colors",
-                  isFeedActive
-                    ? "border-[#1B365D] text-[#1B365D]"
-                    : "border-transparent text-[#475569] hover:text-[#0F172A]",
-                )}
+                className={navLinkClass(isFeedActive)}
               >
                 Track Issues
               </Link>
@@ -96,24 +100,14 @@ export function Navbar() {
                 <Link
                   href="/"
                   aria-current={isFeedActive ? "page" : undefined}
-                  className={cn(
-                    "flex h-16 items-center border-b-2 px-3 text-sm font-semibold transition-colors",
-                    isFeedActive
-                      ? "border-[#1B365D] text-[#1B365D]"
-                      : "border-transparent text-[#475569] hover:text-[#0F172A]",
-                  )}
+                  className={navLinkClass(isFeedActive)}
                 >
                   Explore Issues
                 </Link>
                 <Link
                   href="/my-issues"
                   aria-current={isMyIssuesActive ? "page" : undefined}
-                  className={cn(
-                    "flex h-16 items-center border-b-2 px-3 text-sm font-semibold transition-colors",
-                    isMyIssuesActive
-                      ? "border-[#1B365D] text-[#1B365D]"
-                      : "border-transparent text-[#475569] hover:text-[#0F172A]",
-                  )}
+                  className={navLinkClass(isMyIssuesActive)}
                 >
                   My Reported Issues
                 </Link>
@@ -125,24 +119,14 @@ export function Navbar() {
                 <Link
                   href="/worker"
                   aria-current={isWorkerActive ? "page" : undefined}
-                  className={cn(
-                    "flex h-16 items-center border-b-2 px-3 text-sm font-semibold transition-colors",
-                    isWorkerActive
-                      ? "border-[#1B365D] text-[#1B365D]"
-                      : "border-transparent text-[#475569] hover:text-[#0F172A]",
-                  )}
+                  className={navLinkClass(isWorkerActive)}
                 >
                   Field Tasks
                 </Link>
                 <Link
                   href="/"
                   aria-current={isFeedActive ? "page" : undefined}
-                  className={cn(
-                    "flex h-16 items-center border-b-2 px-3 text-sm font-semibold transition-colors",
-                    isFeedActive
-                      ? "border-[#1B365D] text-[#1B365D]"
-                      : "border-transparent text-[#475569] hover:text-[#0F172A]",
-                  )}
+                  className={navLinkClass(isFeedActive)}
                 >
                   Public Feed
                 </Link>
@@ -154,24 +138,14 @@ export function Navbar() {
                 <Link
                   href="/admin"
                   aria-current={isAdminActive ? "page" : undefined}
-                  className={cn(
-                    "flex h-16 items-center border-b-2 px-3 text-sm font-semibold transition-colors",
-                    isAdminActive
-                      ? "border-[#1B365D] text-[#1B365D]"
-                      : "border-transparent text-[#475569] hover:text-[#0F172A]",
-                  )}
+                  className={navLinkClass(isAdminActive)}
                 >
                   Authority Console
                 </Link>
                 <Link
                   href="/"
                   aria-current={isFeedActive ? "page" : undefined}
-                  className={cn(
-                    "flex h-16 items-center border-b-2 px-3 text-sm font-semibold transition-colors",
-                    isFeedActive
-                      ? "border-[#1B365D] text-[#1B365D]"
-                      : "border-transparent text-[#475569] hover:text-[#0F172A]",
-                  )}
+                  className={navLinkClass(isFeedActive)}
                 >
                   Public Feed
                 </Link>
@@ -180,8 +154,7 @@ export function Navbar() {
           </nav>
         </div>
 
-        {/* Desktop Right Actions */}
-        <div className="hidden md:flex items-center gap-2.5">
+        <div className="hidden items-center gap-2.5 md:flex">
           {!user && (
             <>
               <button
@@ -245,54 +218,36 @@ export function Navbar() {
                 <Plus className="h-4 w-4" aria-hidden="true" />
                 Report an Issue
               </Link>
-              <button
-                type="button"
-                onClick={() => void signOut()}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[#CBD5E1] bg-white px-3 py-2 text-xs font-semibold text-[#334155] transition-colors hover:bg-[#F1F5F9]"
-              >
-                <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
-                Sign Out
-              </button>
             </>
           )}
 
           {isWorker && (
-            <>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-[#FDE68A] bg-[#FFFBEB] px-3 py-1 text-xs font-semibold text-[#92400E]">
-                <Wrench className="h-3.5 w-3.5" aria-hidden="true" />
-                <span>Field Worker</span>
-              </span>
-              <button
-                type="button"
-                onClick={() => void signOut()}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[#CBD5E1] bg-white px-3 py-2 text-xs font-semibold text-[#334155] transition-colors hover:bg-[#F1F5F9]"
-              >
-                <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
-                Sign Out
-              </button>
-            </>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#FDE68A] bg-[#FFFBEB] px-3 py-1 text-xs font-semibold text-[#92400E]">
+              <Wrench className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>Field Worker</span>
+            </span>
           )}
 
           {isAuthority && (
-            <>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-[#99EFE5] bg-[#F0FDFA] px-3 py-1 text-xs font-semibold text-[#0F766E]">
-                <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-                <span>Authority</span>
-              </span>
-              <button
-                type="button"
-                onClick={() => void signOut()}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[#CBD5E1] bg-white px-3 py-2 text-xs font-semibold text-[#334155] transition-colors hover:bg-[#F1F5F9]"
-              >
-                <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
-                Sign Out
-              </button>
-            </>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#99EFE5] bg-[#F0FDFA] px-3 py-1 text-xs font-semibold text-[#0F766E]">
+              <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>Authority</span>
+            </span>
+          )}
+
+          {user && (
+            <button
+              type="button"
+              onClick={() => void signOut()}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#CBD5E1] bg-white px-3 py-2 text-xs font-semibold text-[#334155] transition-colors hover:bg-[#F1F5F9]"
+            >
+              <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
+              Sign Out
+            </button>
           )}
         </div>
 
-        {/* Mobile Header Actions */}
-        <div className="flex md:hidden items-center gap-2">
+        <div className="flex items-center gap-2 md:hidden">
           {!user && (
             <button
               type="button"
@@ -336,199 +291,16 @@ export function Navbar() {
       </div>
 
       {mobileMenuOpen && (
-        <nav
-          id="mobile-nav-panel"
-          aria-label="Mobile navigation"
-          className="border-t border-[#E2E8F0] bg-white px-4 py-3 md:hidden"
-        >
-          <div className="flex flex-col gap-1.5">
-            {!user && (
-              <>
-                <Link
-                  href="/"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={cn(
-                    "rounded-lg px-3 py-2 text-sm font-semibold",
-                    isFeedActive
-                      ? "bg-[#EFF6FF] text-[#1B365D]"
-                      : "text-[#475569] hover:bg-[#F8FAFC]",
-                  )}
-                >
-                  Track Issues
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMobileMenuOpen(false);
-                    openSignInDialog({
-                      tab: "citizen",
-                      mode: "signin",
-                      returnTo: "/report",
-                    });
-                  }}
-                  className="rounded-lg bg-[#1B365D] px-3 py-2 text-left text-sm font-semibold text-white"
-                >
-                  + Report an Issue
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMobileMenuOpen(false);
-                    openSignInDialog({
-                      tab: "worker",
-                      mode: "signin",
-                      returnTo: "/worker",
-                    });
-                  }}
-                  className="rounded-lg border border-[#CBD5E1] px-3 py-2 text-left text-sm font-semibold text-[#1B365D] hover:bg-[#F8FAFC]"
-                >
-                  Field Worker
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMobileMenuOpen(false);
-                    openSignInDialog({
-                      tab: "authority",
-                      mode: "signin",
-                      returnTo: "/admin",
-                    });
-                  }}
-                  className="rounded-lg border border-[#CBD5E1] px-3 py-2 text-left text-sm font-semibold text-[#1B365D] hover:bg-[#F8FAFC]"
-                >
-                  Authority
-                </button>
-              </>
-            )}
-
-            {isCitizen && (
-              <>
-                <Link
-                  href="/"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={cn(
-                    "rounded-lg px-3 py-2 text-sm font-semibold",
-                    isFeedActive
-                      ? "bg-[#EFF6FF] text-[#1B365D]"
-                      : "text-[#475569] hover:bg-[#F8FAFC]",
-                  )}
-                >
-                  Explore Issues
-                </Link>
-                <Link
-                  href="/my-issues"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={cn(
-                    "rounded-lg px-3 py-2 text-sm font-semibold",
-                    isMyIssuesActive
-                      ? "bg-[#EFF6FF] text-[#1B365D]"
-                      : "text-[#475569] hover:bg-[#F8FAFC]",
-                  )}
-                >
-                  My Reported Issues
-                </Link>
-                <Link
-                  href="/report"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="rounded-lg px-3 py-2 text-sm font-semibold text-[#475569] hover:bg-[#F8FAFC]"
-                >
-                  + Report an Issue
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMobileMenuOpen(false);
-                    void signOut();
-                  }}
-                  className="mt-1 flex w-full items-center justify-between rounded-lg border-t border-[#E2E8F0] px-3 py-2 text-sm font-semibold text-[#991B1B]"
-                >
-                  <span>Sign Out ({user.displayName})</span>
-                  <LogOut className="h-4 w-4" aria-hidden="true" />
-                </button>
-              </>
-            )}
-
-            {isWorker && (
-              <>
-                <Link
-                  href="/worker"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={cn(
-                    "rounded-lg px-3 py-2 text-sm font-semibold",
-                    isWorkerActive
-                      ? "bg-[#EFF6FF] text-[#1B365D]"
-                      : "text-[#475569] hover:bg-[#F8FAFC]",
-                  )}
-                >
-                  Field Tasks
-                </Link>
-                <Link
-                  href="/"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={cn(
-                    "rounded-lg px-3 py-2 text-sm font-semibold",
-                    isFeedActive
-                      ? "bg-[#EFF6FF] text-[#1B365D]"
-                      : "text-[#475569] hover:bg-[#F8FAFC]",
-                  )}
-                >
-                  Public Feed
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMobileMenuOpen(false);
-                    void signOut();
-                  }}
-                  className="mt-1 flex w-full items-center justify-between rounded-lg border-t border-[#E2E8F0] px-3 py-2 text-sm font-semibold text-[#991B1B]"
-                >
-                  <span>Sign Out ({user.displayName})</span>
-                  <LogOut className="h-4 w-4" aria-hidden="true" />
-                </button>
-              </>
-            )}
-
-            {isAuthority && (
-              <>
-                <Link
-                  href="/admin"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={cn(
-                    "rounded-lg px-3 py-2 text-sm font-semibold",
-                    isAdminActive
-                      ? "bg-[#EFF6FF] text-[#1B365D]"
-                      : "text-[#475569] hover:bg-[#F8FAFC]",
-                  )}
-                >
-                  Authority Console
-                </Link>
-                <Link
-                  href="/"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={cn(
-                    "rounded-lg px-3 py-2 text-sm font-semibold",
-                    isFeedActive
-                      ? "bg-[#EFF6FF] text-[#1B365D]"
-                      : "text-[#475569] hover:bg-[#F8FAFC]",
-                  )}
-                >
-                  Public Feed
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMobileMenuOpen(false);
-                    void signOut();
-                  }}
-                  className="mt-1 flex w-full items-center justify-between rounded-lg border-t border-[#E2E8F0] px-3 py-2 text-sm font-semibold text-[#991B1B]"
-                >
-                  <span>Sign Out ({user.displayName})</span>
-                  <LogOut className="h-4 w-4" aria-hidden="true" />
-                </button>
-              </>
-            )}
-          </div>
-        </nav>
+        <MobileNavMenu
+          user={user}
+          isFeedActive={isFeedActive}
+          isMyIssuesActive={isMyIssuesActive}
+          isWorkerActive={isWorkerActive}
+          isAdminActive={isAdminActive}
+          onClose={() => setMobileMenuOpen(false)}
+          onOpenSignIn={openSignInDialog}
+          onSignOut={() => void signOut()}
+        />
       )}
     </header>
   );

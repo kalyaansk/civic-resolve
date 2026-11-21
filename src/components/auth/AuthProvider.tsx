@@ -7,11 +7,19 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
 } from "react";
 import { SignInDialog } from "@/components/auth/SignInDialog";
+import {
+  clearAllDemoSessions,
+  fetchServerSession,
+  mapFirebaseUser,
+  normalizeUserRole,
+  startDemoRoleSession,
+} from "@/lib/auth/sessionClient";
 import {
   getFirebaseAuth,
   isFirebaseClientConfigured,
@@ -54,25 +62,6 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-function normalizeUserRole(rawRole: string | null | undefined): UserRole {
-  if (rawRole === "admin" || rawRole === "authority") return "authority";
-  if (rawRole === "worker") return "worker";
-  return "citizen";
-}
-
-function mapFirebaseUser(
-  fbUser: FirebaseUser,
-  role: UserRole,
-): UserProfile {
-  return {
-    uid: fbUser.uid,
-    email: fbUser.email ?? "",
-    displayName: fbUser.displayName || fbUser.email || "Verified Citizen",
-    role,
-    isDemo: false,
-  };
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
@@ -91,30 +80,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const authMutationSeqRef = useRef(0);
   const firebaseConfigured = isFirebaseClientConfigured();
 
-  const fetchServerSession = useCallback(async (idToken?: string) => {
-    try {
-      const res = await fetch("/api/auth/session", {
-        method: "GET",
-        credentials: "same-origin",
-        headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
-      });
-      if (!res.ok) return null;
-      return (await res.json()) as {
-        authenticated: boolean;
-        authorized: boolean;
-        role: string | null;
-        actor: string;
-        displayName: string;
-        email: string | null;
-        uid: string | null;
-        isDemo: boolean;
-        demoEnabled: boolean;
-      };
-    } catch {
-      return null;
-    }
-  }, []);
-
   const resolveFirebaseRole = useCallback(
     async (fbUser: FirebaseUser | null): Promise<UserRole> => {
       if (!fbUser) {
@@ -132,7 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return "citizen";
       }
     },
-    [fetchServerSession],
+    [],
   );
 
   const refreshCookieSession = useCallback(async () => {
@@ -151,7 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } else {
       setDemoUser(null);
     }
-  }, [fetchServerSession]);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -165,12 +130,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    const init = async () => {
+    void (async () => {
       await refreshCookieSession();
       cookieInitDone = true;
       maybeFinishLoading();
-    };
-    void init();
+    })();
 
     if (!auth) {
       return () => {
@@ -203,80 +167,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setDialogOpen(true);
   }, []);
 
-  const closeSignInDialog = useCallback(() => {
-    setDialogOpen(false);
-  }, []);
+  const closeSignInDialog = useCallback(() => setDialogOpen(false), []);
 
   const signInDemoCitizen = useCallback(async (): Promise<UserProfile> => {
     authMutationSeqRef.current += 1;
-    const res = await fetch("/api/auth/demo-citizen", {
-      method: "POST",
-      credentials: "same-origin",
-    });
-    if (!res.ok) {
-      const body = (await res.json().catch(() => ({}))) as { error?: string };
-      throw new Error(body.error || "Unable to start Demo Citizen session.");
-    }
-    const data = (await res.json()) as {
-      user: { uid: string; name: string; email: string };
-    };
-    const profile: UserProfile = {
-      uid: data.user.uid,
-      email: data.user.email,
-      displayName: data.user.name,
-      role: "citizen",
-      isDemo: true,
-    };
+    const profile = await startDemoRoleSession(
+      "/api/auth/demo-citizen",
+      "citizen",
+      "Unable to start Demo Citizen session.",
+    );
     setDemoUser(profile);
     return profile;
   }, []);
 
   const signInDemoWorker = useCallback(async (): Promise<UserProfile> => {
     authMutationSeqRef.current += 1;
-    const res = await fetch("/api/auth/demo-worker", {
-      method: "POST",
-      credentials: "same-origin",
-    });
-    if (!res.ok) {
-      const body = (await res.json().catch(() => ({}))) as { error?: string };
-      throw new Error(
-        body.error || "Unable to start Demo Field Worker session.",
-      );
-    }
-    const data = (await res.json()) as {
-      user: { uid: string; name: string; email: string };
-    };
-    const profile: UserProfile = {
-      uid: data.user.uid,
-      email: data.user.email,
-      displayName: data.user.name,
-      role: "worker",
-      isDemo: true,
-    };
+    const profile = await startDemoRoleSession(
+      "/api/auth/demo-worker",
+      "worker",
+      "Unable to start Demo Field Worker session.",
+    );
     setDemoUser(profile);
     return profile;
   }, []);
 
   const signInDemoAdmin = useCallback(async (): Promise<UserProfile> => {
     authMutationSeqRef.current += 1;
-    const res = await fetch("/api/auth/demo-admin", {
-      method: "POST",
-      credentials: "same-origin",
-    });
-    if (!res.ok) {
-      const body = (await res.json().catch(() => ({}))) as { error?: string };
-      throw new Error(body.error || "Unable to start Demo Authority session.");
-    }
-    const data = (await res.json()) as {
-      user: { uid: string; name: string; email: string };
-    };
-    const profile: UserProfile = {
-      uid: data.user.uid,
-      email: data.user.email,
-      displayName: data.user.name,
-      role: "authority",
-      isDemo: true,
-    };
+    const profile = await startDemoRoleSession(
+      "/api/auth/demo-admin",
+      "authority",
+      "Unable to start Demo Authority session.",
+    );
     setDemoUser(profile);
     return profile;
   }, []);
@@ -320,21 +241,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     authMutationSeqRef.current += 1;
-    await Promise.all([
-      signOutFirebaseUser(),
-      fetch("/api/auth/demo-admin", {
-        method: "DELETE",
-        credentials: "same-origin",
-      }).catch(() => undefined),
-      fetch("/api/auth/demo-worker", {
-        method: "DELETE",
-        credentials: "same-origin",
-      }).catch(() => undefined),
-      fetch("/api/auth/demo-citizen", {
-        method: "DELETE",
-        credentials: "same-origin",
-      }).catch(() => undefined),
-    ]);
+    await Promise.all([signOutFirebaseUser(), clearAllDemoSessions()]);
     setFirebaseUser(null);
     setFirebaseRole("citizen");
     setDemoUser(null);
@@ -352,29 +259,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return {};
   }, [firebaseUser]);
 
-  const activeUser: UserProfile | null =
-    demoUser ??
-    (firebaseUser ? mapFirebaseUser(firebaseUser, firebaseRole) : null);
+  const activeUser: UserProfile | null = useMemo(
+    () =>
+      demoUser ??
+      (firebaseUser ? mapFirebaseUser(firebaseUser, firebaseRole) : null),
+    [demoUser, firebaseUser, firebaseRole],
+  );
+
+  const contextValue = useMemo<AuthContextValue>(
+    () => ({
+      user: activeUser,
+      loading,
+      firebaseConfigured,
+      demoEnabled,
+      openSignInDialog,
+      closeSignInDialog,
+      signInDemoCitizen,
+      signInDemoWorker,
+      signInDemoAdmin,
+      signInEmail,
+      signUpEmail,
+      signInGoogle,
+      signOut,
+      getAuthHeaders,
+    }),
+    [
+      activeUser,
+      loading,
+      firebaseConfigured,
+      demoEnabled,
+      openSignInDialog,
+      closeSignInDialog,
+      signInDemoCitizen,
+      signInDemoWorker,
+      signInDemoAdmin,
+      signInEmail,
+      signUpEmail,
+      signInGoogle,
+      signOut,
+      getAuthHeaders,
+    ],
+  );
 
   return (
-    <AuthContext.Provider
-      value={{
-        user: activeUser,
-        loading,
-        firebaseConfigured,
-        demoEnabled,
-        openSignInDialog,
-        closeSignInDialog,
-        signInDemoCitizen,
-        signInDemoWorker,
-        signInDemoAdmin,
-        signInEmail,
-        signUpEmail,
-        signInGoogle,
-        signOut,
-        getAuthHeaders,
-      }}
-    >
+    <AuthContext.Provider value={contextValue}>
       {children}
       <SignInDialog
         key={dialogKey}

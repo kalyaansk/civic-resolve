@@ -17,8 +17,8 @@ import {
   AIDepartmentBadge,
   PriorityBadge,
   StatusBadge,
-} from "@/components/ui/Badges";
-import { formatDateTime } from "@/lib/utils";
+} from "@/components/ui/IssueBadges";
+import { formatDateTime } from "@/lib/utils/formatters";
 import { ISSUE_STATUSES, type Issue } from "@/types/issue";
 
 function getStageIndex(status: Issue["status"]): number {
