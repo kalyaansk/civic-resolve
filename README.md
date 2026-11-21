@@ -18,6 +18,10 @@
 
 In most civic complaint portals, reports disappear into a black hole after submission. CivicResolve closes that loop using **Google Gemini AI** at two critical checkpoints: first to judge how urgent a newly reported hazard is and route it to the right department, and second to visually compare **Before vs. After** repair photos before an official marks the issue resolved.
 
+> **Key Takeaway — Live Public Transparency:** Open read-only Map + List Split View with regional State/City cascading filters and AI-triaged civic issue cards.
+<img width="1440" height="814" alt="Screenshot 2026-11-21 at 4 02 12 PM" src="https://github.com/user-attachments/assets/549e553a-5e51-4c2d-8ff0-490c50de1777" />
+
+
 ### How the 4-Stage Workflow Works
 
 1. **Reported — Citizen & Gemini AI Triage**  
@@ -115,6 +119,10 @@ Instead of relying on manual sorting or simple keyword matching, CivicResolve us
 | **40 – 69** | 🟡 **Medium** | Localized infrastructure damage or routine public hazard |
 | **1 – 39** | 🟢 **Low** | Minor wear, cosmetic issues, or non-urgent maintenance |
 
+<img width="1434" height="801" alt="Screenshot 2026-11-21 at 4 00 41 PM" src="https://github.com/user-attachments/assets/23040840-1e83-4e4d-be1b-fa6737e4d960" />
+
+
+
 * **Before-vs-After AI Repair Verification:** When a field worker uploads proof of completion, Gemini visually compares the original complaint and "Before" photo against the new "After" photo. It outputs a clear verdict (**Verified Fixed**, **Partially Fixed**, or **Needs Re-Inspection**), confidence score, and recommendation (**Approve Resolution** vs. **Request Rework**).
 * **Always-On Reliability:** If the AI service is ever rate-limited or temporarily unavailable, a built-in deterministic fallback keeps triage and field workflows running smoothly.
 
@@ -146,6 +154,10 @@ CivicResolve is engineered with layered defenses across AI prompts, user roles, 
 
 * **AI Prompt Encapsulation & Injection Defense:**  
   System rules are strictly separated from user inputs using Gemini's dedicated system instruction channel. Citizen reports and worker notes are sanitized and wrapped inside strict data boundaries. A combined pre-scanner and AI schema check automatically blocks jailbreak attempts and off-topic prompts (such as math or trivia questions) so spam never enters the database or manipulates urgency scores.
+  
+> **Key Takeaway — Multimodal Criticality Triage:** Gemini evaluates hazard severity (`95/100 Critical`, `98% confidence`) and automatically routes the report to *Street Lighting & Power* with a transparent rationale.
+<img width="1439" height="809" alt="Screenshot 2026-11-21 at 4 00 57 PM" src="https://github.com/user-attachments/assets/daf2b2ec-c1a7-43ac-a4c8-086e218338af" />
+
 * **Strict Server-Side Role Enforcement:**  
   Every protected action is verified on the server using Firebase ID Tokens or cryptographically signed `HttpOnly` demo cookies. Citizens cannot access Field Worker or Authority actions, Field Workers cannot submit citizen complaints or approve their own work, and elevated roles are strictly pre-authorized via server allowlists—never open self-registration.
 * **Zero Exposed Secrets & Keyless Cloud Auth:**  
