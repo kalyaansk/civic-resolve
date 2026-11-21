@@ -1,0 +1,19 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /issues/{issueId}/{fileName} {
+      // Uploaded civic evidence photos are publicly readable on transparency pages
+      allow read: if true;
+
+      // Enforce 5 MB max file size and JPEG/PNG/WebP image MIME types
+      allow write: if request.resource != null
+        && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp)');
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
