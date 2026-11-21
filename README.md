@@ -9,7 +9,7 @@
 [![Google Cloud Run](https://img.shields.io/badge/Deploy-Google_Cloud_Run-2563EB?logo=googlecloud&logoColor=white)](https://cloud.google.com/run)
 [![WCAG 2.1 AA](https://img.shields.io/badge/Accessibility-WCAG_2.1_AA-16A34A)](https://www.w3.org/WAI/standards-guidelines/wcag/)
 
-**Live Demo:** `[YOUR_CLOUD_RUN_URL]`  
+**Live Demo:** `(https://civic-resolve-948968475630.asia-south1.run.app/)`  
 *(Includes one-click **Demo Citizen**, **Demo Field Worker**, and **Demo Authority** logins so anyone can experience all three roles instantly.)*
 
 ---
